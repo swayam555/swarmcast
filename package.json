@@ -1,0 +1,24 @@
+{
+  "name": "shoal",
+  "version": "0.1.0",
+  "description": "Peer-assisted distribution of large artifacts (model checkpoints, datasets, images) over the BitTorrent wire protocol, with a control plane, worker leases and a live console.",
+  "type": "module",
+  "main": "src/server.js",
+  "bin": { "shoal": "./bin/shoal.js" },
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "start": "node src/server.js",
+    "worker": "node src/worker.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
+    "herd": "node test/load/herd.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "ioredis": "^5.4.1",
+    "kafkajs": "^2.2.4"
+  },
+  "license": "MIT"
+}
