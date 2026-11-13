@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS transfers (
   id TEXT PRIMARY KEY, info_hash TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
   magnet TEXT NOT NULL, torrent BLOB, size INTEGER NOT NULL DEFAULT 0,
-  piece_count INTEGER NOT NULL DEFAULT 0, source_path TEXT,
+  piece_count INTEGER NOT NULL DEFAULT 0, source_path TEXT, origin_url TEXT,
   desired TEXT NOT NULL DEFAULT 'running',       -- running | paused | removed
   replicas TEXT NOT NULL DEFAULT '1',             -- '1'..'n' or 'all'
   selected TEXT,                                  -- JSON array of file indices or NULL = all
@@ -70,6 +70,8 @@ export function openDb(file) {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL;');
   db.exec(SCHEMA);
+  // databases created before HTTP origins existed
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('transfers') WHERE name = 'origin_url'").get()) db.exec('ALTER TABLE transfers ADD COLUMN origin_url TEXT');
   return wrap(db);
 }
 

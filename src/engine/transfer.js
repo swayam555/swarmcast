@@ -7,6 +7,7 @@ import { TorrentStorage } from './storage.js';
 import { fromInfoBuffer, pieceSize, sha1, toMagnet } from './metainfo.js';
 import { announce as trackerAnnounce } from './tracker.js';
 import { Meter } from './rate.js';
+import { readFromOrigin } from './origin.js';
 
 const BLOCK = 16 * 1024;
 const META_PIECE = 16 * 1024;
@@ -14,13 +15,16 @@ const MAX_PEERS = 40;
 const PIPELINE = 24;
 const UPLOAD_SLOTS = 8;
 const REQUEST_TIMEOUT = 20_000;
+const ORIGIN_GRACE = 4_000;      // peers get this long to deliver before the HTTP origin is used
+const ORIGIN_PARALLEL = 2;       // pieces fetched from the origin at once
+const ORIGIN_BACKOFF = 15_000;   // pause after an origin error
 
 export const STATES = ['queued', 'checking', 'fetching_metadata', 'downloading', 'seeding', 'paused', 'error', 'stopped'];
 
 export class Transfer extends EventEmitter {
   /**
    * @param engine owning Engine (peer id, listen port, throttles, CAS, DHT)
-   * @param opts { infoHash, meta?, name?, announce?, peers?, downloadPath, selected?, bitfieldHex?, seedOnly? }
+   * @param opts { infoHash, meta?, name?, announce?, peers?, downloadPath, selected?, bitfieldHex?, seedOnly?, originUrl? }
    */
   constructor(engine, opts) {
     super();
@@ -39,6 +43,8 @@ export class Transfer extends EventEmitter {
     this.failedAddrs = new Map();
     this.down = new Meter(); this.up = new Meter();
     this.downloaded = 0; this.uploaded = 0; this.wasted = 0; this.dedupBytes = 0;
+    this.originUrl = opts.originUrl || null;
+    this.originBytes = 0; this.originPieces = new Set(); this.originPausedUntil = 0; this.lastPeerBlockAt = 0;
     this.addedAt = new Date();
     this.completedAt = null;
     this.metadataParts = null;
@@ -106,6 +112,7 @@ export class Transfer extends EventEmitter {
       else this.setState('fetching_metadata');
       if (this.stopping) return;
       if (this.meta) this.setState(this.isDone() ? 'seeding' : 'downloading');
+      this.lastPeerBlockAt = Date.now();
       this.discoverTimer = setInterval(() => this.discover(), 30_000);
       this.tickTimer = setInterval(() => this.tick(), 1000);
       this.chokeTimer = setInterval(() => this.rechoke(), 10_000);
@@ -336,7 +343,7 @@ export class Transfer extends EventEmitter {
     // 2. start new pieces, rarest first
     const candidates = [];
     for (let i = 0; i < this.meta.pieces.length; i++) {
-      if (this.have.get(i) || !this.wanted.get(i) || !peer.have.get(i) || this.inflight.has(i) || this.writing.has(i)) continue;
+      if (this.have.get(i) || !this.wanted.get(i) || !peer.have.get(i) || this.inflight.has(i) || this.writing.has(i) || this.originPieces.has(i)) continue;
       candidates.push(i);
     }
     candidates.sort((a, b) => this.availability[a] - this.availability[b] || Math.random() - 0.5);
@@ -403,6 +410,7 @@ export class Transfer extends EventEmitter {
     const key = `${i}:${begin}`;
     if (peer.pending?.delete(key)) peer.requests = Math.max(0, peer.requests - 1);
     peer.down.add(block.length); this.down.add(block.length); this.downloaded += block.length;
+    this.lastPeerBlockAt = Date.now();
     this.engine.onBytes('down', block.length);
     const st = this.inflight.get(i);
     if (!st || this.have.get(i) || this.writing.has(i) || st.received.has(begin)) { this.wasted += block.length; this.pump(); return; }
@@ -429,6 +437,50 @@ export class Transfer extends EventEmitter {
       }
     }
     this.pump();
+  }
+
+  /**
+   * Cold start: if peers have delivered nothing for a while (no seed has the data yet, or the
+   * swarm is too slow), fetch whole pieces from the HTTP origin. Verified like any other piece,
+   * then served to the swarm, so the origin is read about once per fleet.
+   */
+  pullFromOrigin() {
+    if (!this.originUrl || !this.meta || this.state !== 'downloading' || this.stopping) return;
+    const now = Date.now();
+    if (now < this.originPausedUntil || now - this.lastPeerBlockAt < ORIGIN_GRACE) return;
+    for (let i = 0; i < this.meta.pieces.length && this.originPieces.size < ORIGIN_PARALLEL; i++) {
+      if (this.have.get(i) || !this.wanted.get(i) || this.inflight.has(i) || this.writing.has(i) || this.originPieces.has(i)) continue;
+      this.originPieces.add(i);
+      this.fetchOriginPiece(i).finally(() => { this.originPieces.delete(i); this.pullFromOrigin(); });
+    }
+  }
+
+  async fetchOriginPiece(i) {
+    const len = pieceSize(this.meta, i);
+    try {
+      await this.engine.downThrottle.take(len);
+      if (this.stopping || this.have.get(i)) return;
+      const data = await readFromOrigin(this.meta, this.originUrl, i * this.meta.pieceLength, len);
+      if (this.stopping || this.have.get(i)) return;
+      this.down.add(len); this.downloaded += len; this.originBytes += len;
+      this.engine.onBytes('down', len);
+      this.engine.metrics?.inc('shoal_origin_bytes_total', len);
+      if (!sha1(data).equals(this.meta.pieces[i])) {
+        this.wasted += len;
+        throw new Error(`piece ${i} from the origin failed its hash check (is the URL the right file?)`);
+      }
+      this.writing.add(i);
+      try { await this.storage.writePiece(i, data); } finally { this.writing.delete(i); }
+      this.have.set(i);
+      this.engine.cas?.put(this.meta.pieces[i].toString('hex'), data).catch(() => {});
+      for (const p of this.peers.values()) p.wire.have(i);
+      this.emit('piece', i);
+      this.maybeComplete();
+    } catch (err) {
+      if (this.stopping) return;
+      this.originPausedUntil = Date.now() + ORIGIN_BACKOFF;
+      this.emit('warning', `origin: ${err.message}`);
+    }
   }
 
   maybeComplete() {
@@ -498,6 +550,7 @@ export class Transfer extends EventEmitter {
     if (['downloading', 'fetching_metadata'].includes(this.state) && this.peers.size < 5) for (const a of this.known) { if (this.peers.size >= MAX_PEERS) break; this.addPeer(a); }
     if (this.state === 'fetching_metadata') for (const p of this.peers.values()) this.requestMetadata(p);
     this.pump();
+    this.pullFromOrigin();
     this.emit('progress', this.snapshot());
   }
 
@@ -523,7 +576,7 @@ export class Transfer extends EventEmitter {
       completedPieces: this.have?.count() || 0,
       activePieces: this.inflight?.size || 0,
       pendingRequests: peers.reduce((n, p) => n + p.requests, 0),
-      wasted: this.wasted, dedupBytes: this.dedupBytes,
+      wasted: this.wasted, dedupBytes: this.dedupBytes, originBytes: this.originBytes,
       ratio: this.downloaded ? Math.round((this.uploaded / this.downloaded) * 100) / 100 : 0,
     };
   }

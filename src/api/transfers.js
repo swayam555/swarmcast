@@ -1,12 +1,16 @@
 // Transfer API. The control plane never runs swarms itself: it records desired
 // state, publishes a directive, and reads progress that workers write back.
 import { Router, raw } from 'express';
-import { mkdir, writeFile, stat } from 'node:fs/promises';
+import { mkdir, writeFile, stat, rm } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import { parseMagnet, parseTorrent, createTorrent, toMagnet } from '../engine/metainfo.js';
 import { now, uuid, logActivity } from '../store/db.js';
 import { tarStream } from './tar.js';
+import { checkOriginUrl, httpGet } from '../engine/origin.js';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { createWriteStream } from 'node:fs';
 
 const HEX40 = /^[0-9a-f]{40}$/i;
 
@@ -35,6 +39,9 @@ export function view(db, tr, userId, { detail = false } = {}) {
     files: d.files || [], trackers: tr.torrent ? safeTrackers(tr.torrent) : parseMagnetSafe(tr.magnet),
     addedAt: tr.created_at, createdAt: tr.created_at, completedAt: primary?.completed_at || null,
     isOwner: tr.owner_id === userId, hasSource: Boolean(tr.source_path),
+    // a pre-signed URL is a secret: show only where it points
+    origin: tr.origin_url ? new URL(tr.origin_url).host : null,
+    originBytes: pl.reduce((n, p) => n + (p.detail ? JSON.parse(p.detail).originBytes || 0 : 0), 0),
     uploadedBy: tr.owner_id ? { _id: tr.owner_id, username: tr.owner_name || 'unknown' } : null,
     nodes: pl.map((p) => ({ nodeId: p.node_id, host: p.host, nodeStatus: p.node_status, state: p.state, progress: p.progress, downloadSpeed: p.download_speed, uploadSpeed: p.upload_speed, peers: p.peers, dedupBytes: p.dedup_bytes, updatedAt: p.updated_at })),
     downloadable: pl.some((p) => p.progress >= 100 && p.data_path && p.state !== 'lost'),
@@ -68,8 +75,15 @@ export function transferRoutes({ cfg, db, bus, metrics }) {
     metrics.inc('shoal_directives_published_total', 1, { type });
   };
 
+  /** An HTTP origin makes workers fetch URLs, so only admins (and the service token) may set one. */
+  const originFor = (req, value) => {
+    const url = checkOriginUrl(value);
+    if (url && req.user.role !== 'admin' && req.user.id !== 'service') throw Object.assign(new Error('Only admins can set an HTTP origin'), { status: 403 });
+    return url;
+  };
+
   /** Insert a transfer (or return the existing one for the same info hash). */
-  async function register(req, { infoHash, name, magnet, torrent = null, size = 0, pieces = 0, sourcePath = null }) {
+  async function register(req, { infoHash, name, magnet, torrent = null, size = 0, pieces = 0, sourcePath = null, originUrl = null }) {
     const existing = db.get('SELECT * FROM transfers WHERE info_hash = ?', infoHash);
     if (existing) {
       if (existing.desired === 'removed') { const e = new Error('This artifact is still being removed, try again in a moment'); e.status = 409; throw e; }
@@ -78,9 +92,9 @@ export function transferRoutes({ cfg, db, bus, metrics }) {
     const replicas = String(req.body?.replicas ?? req.query.replicas ?? '1');
     if (!/^(all|[1-9]\d{0,2})$/.test(replicas)) { const e = new Error('replicas must be a number or "all"'); e.status = 400; throw e; }
     const autoStart = (req.body?.autoStart ?? req.query.autoStart) !== false && (req.body?.autoStart ?? req.query.autoStart) !== 'false';
-    const tr = { id: uuid(), info_hash: infoHash, name, magnet, torrent, size, piece_count: pieces, source_path: sourcePath, desired: autoStart ? 'running' : 'paused', replicas, owner_id: req.user.id === 'service' ? null : req.user.id, request_id: req.id, created_at: now(), updated_at: now() };
-    db.run(`INSERT INTO transfers(id, info_hash, name, magnet, torrent, size, piece_count, source_path, desired, replicas, owner_id, request_id, created_at, updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, tr.id, tr.info_hash, tr.name, tr.magnet, tr.torrent, tr.size, tr.piece_count, tr.source_path, tr.desired, tr.replicas, tr.owner_id, tr.request_id, tr.created_at, tr.updated_at);
+    const tr = { id: uuid(), info_hash: infoHash, name, magnet, torrent, size, piece_count: pieces, source_path: sourcePath, origin_url: originUrl, desired: autoStart ? 'running' : 'paused', replicas, owner_id: req.user.id === 'service' ? null : req.user.id, request_id: req.id, created_at: now(), updated_at: now() };
+    db.run(`INSERT INTO transfers(id, info_hash, name, magnet, torrent, size, piece_count, source_path, origin_url, desired, replicas, owner_id, request_id, created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, tr.id, tr.info_hash, tr.name, tr.magnet, tr.torrent, tr.size, tr.piece_count, tr.source_path, tr.origin_url, tr.desired, tr.replicas, tr.owner_id, tr.request_id, tr.created_at, tr.updated_at);
     logActivity(db, { transferId: tr.id, userId: tr.owner_id, event: 'transfer.created', detail: { name, size, replicas }, requestId: req.id });
     await dispatch('JOB_ASSIGNED', tr, req);
     return { tr, created: true };
@@ -109,8 +123,9 @@ export function transferRoutes({ cfg, db, bus, metrics }) {
       if (!magnetURI) return res.status(400).json({ error: 'magnetURI is required' });
       let m;
       try { m = parseMagnet(magnetURI); } catch (e) { return res.status(400).json({ error: e.message }); }
+      const originUrl = originFor(req, req.body?.originUrl);
       const magnet = toMagnet({ infoHash: m.infoHash, name: m.name, announce: [...m.announce, ...cfg.trackers], length: m.length }) + m.peers.map((p) => `&x.pe=${p}`).join('');
-      respond(req, res, await register(req, { infoHash: m.infoHash, name: m.name || m.infoHash, magnet, size: m.length || 0 }));
+      respond(req, res, await register(req, { infoHash: m.infoHash, name: m.name || m.infoHash, magnet, size: m.length || 0, originUrl }));
     } catch (e) { next(e); }
   });
 
@@ -120,8 +135,9 @@ export function transferRoutes({ cfg, db, bus, metrics }) {
       if (!req.body?.length) return res.status(400).json({ error: 'Send the .torrent file as the request body' });
       let meta;
       try { meta = parseTorrent(req.body); } catch (e) { return res.status(400).json({ error: `Not a valid .torrent: ${e.message}` }); }
+      const originUrl = originFor(req, req.query.originUrl);
       const magnet = toMagnet({ infoHash: meta.infoHash, name: meta.name, announce: [...meta.announce, ...cfg.trackers], length: meta.length });
-      respond(req, res, await register(req, { infoHash: meta.infoHash, name: meta.name, magnet, torrent: meta.torrent, size: meta.length, pieces: meta.pieces.length }));
+      respond(req, res, await register(req, { infoHash: meta.infoHash, name: meta.name, magnet, torrent: meta.torrent, size: meta.length, pieces: meta.pieces.length, originUrl }));
     } catch (e) { next(e); }
   });
 
@@ -137,8 +153,42 @@ export function transferRoutes({ cfg, db, bus, metrics }) {
       await writeFile(file, req.body);
       const meta = await createTorrent(file, { announce: cfg.trackers, comment: `shared via Shoal by ${req.user.username}` });
       const magnet = toMagnet({ infoHash: meta.infoHash, name: meta.name, announce: meta.announce, length: meta.length });
-      respond(req, res, await register(req, { infoHash: meta.infoHash, name: meta.name, magnet, torrent: meta.torrent, size: meta.length, pieces: meta.pieces.length, sourcePath: file }));
+      const result = await register(req, { infoHash: meta.infoHash, name: meta.name, magnet, torrent: meta.torrent, size: meta.length, pieces: meta.pieces.length, sourcePath: file });
+      if (!result.created) await rm(dir, { recursive: true, force: true }); // same file shared again: keep the first copy only
+      respond(req, res, result);
     } catch (e) { next(e); }
+  });
+
+  // Cold start from object storage: the API pulls the URL once (e.g. an S3 pre-signed URL), hashes it
+  // and a worker seeds it. The URL is kept as the transfer's origin, so it stays a fallback source.
+  r.post('/create-from-url', async (req, res, next) => {
+    let dir;
+    try {
+      const url = originFor(req, req.body?.url);
+      if (!url) return res.status(400).json({ error: 'url is required' });
+      const fromUrl = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() || '');
+      const filename = path.basename(String(req.body?.name || fromUrl || 'artifact')).replace(/[\0/\\]/g, '_');
+      if (!filename || filename === '.' || filename === '..') return res.status(400).json({ error: 'Give the artifact a name' });
+      const upstream = await httpGet(url, { timeoutMs: 120_000 }).catch((e) => { throw Object.assign(new Error(`Could not reach the URL: ${e.code || e.message}`), { status: 502 }); });
+      if (upstream.statusCode < 200 || upstream.statusCode > 299) { upstream.destroy(); return res.status(502).json({ error: `The URL answered HTTP ${upstream.statusCode}` }); }
+      const cap = bytes(cfg.maxUpload);
+      if (Number(upstream.headers['content-length']) > cap) { upstream.destroy(); return res.status(413).json({ error: `Larger than the ${cfg.maxUpload} limit` }); }
+      dir = path.join(cfg.uploadDir, uuid());
+      await mkdir(dir, { recursive: true });
+      const file = path.join(dir, filename);
+      let seen = 0;
+      const limit = new Transform({ transform(chunk, _enc, cb) { seen += chunk.length; cb(seen > cap ? Object.assign(new Error(`Larger than the ${cfg.maxUpload} limit`), { status: 413 }) : null, chunk); } });
+      await pipeline(upstream, limit, createWriteStream(file));
+      if (!seen) throw Object.assign(new Error('The URL returned an empty file'), { status: 400 });
+      const meta = await createTorrent(file, { announce: cfg.trackers, comment: `pulled by Shoal for ${req.user.username}` });
+      const magnet = toMagnet({ infoHash: meta.infoHash, name: meta.name, announce: meta.announce, length: meta.length });
+      const result = await register(req, { infoHash: meta.infoHash, name: meta.name, magnet, torrent: meta.torrent, size: meta.length, pieces: meta.pieces.length, sourcePath: file, originUrl: url });
+      if (!result.created) await rm(dir, { recursive: true, force: true }); // already known: keep the first copy only
+      respond(req, res, result);
+    } catch (e) {
+      if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
+      next(e);
+    }
   });
 
   r.get('/:id', (req, res) => res.json(view(db, owned(req), req.user.id)));
@@ -204,6 +254,11 @@ export function transferRoutes({ cfg, db, bus, metrics }) {
     if (!live) db.run('DELETE FROM transfers WHERE id = ?', tr.id);
     logActivity(db, { transferId: tr.id, userId: req.user.id === 'service' ? null : req.user.id, event: 'transfer.deleted', detail: { deleteFiles }, requestId: req.id });
     await dispatch('JOB_UPDATED', { ...tr, desired: 'removed' }, req, { deleteFiles });
+    // A shared file is seeded straight from its upload folder; that copy is ours to remove too.
+    const uploads = path.resolve(cfg.uploadDir) + path.sep;
+    if (deleteFiles && tr.source_path && path.resolve(tr.source_path).startsWith(uploads)) {
+      await rm(path.dirname(path.resolve(tr.source_path)), { recursive: true, force: true }).catch(() => {});
+    }
     res.json({ message: deleteFiles ? 'Transfer and downloaded data deleted' : 'Transfer removed' });
   });
 
@@ -241,4 +296,11 @@ export function fleetStats(db) {
     for (const k of Object.keys(agg)) agg[k] += s[k] || 0;
   }
   return { ...agg, workers: nodes.length };
+}
+
+/** "2gb" / "500mb" / "1048576" → bytes */
+function bytes(v) {
+  const m = /^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb|tb)?$/i.exec(String(v).trim());
+  if (!m) return 2 * 1024 ** 3;
+  return Math.floor(Number(m[1]) * 1024 ** ['b', 'kb', 'mb', 'gb', 'tb'].indexOf((m[2] || 'b').toLowerCase()));
 }

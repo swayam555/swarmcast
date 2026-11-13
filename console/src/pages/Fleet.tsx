@@ -67,7 +67,7 @@ export function ActivityPage() {
               <li key={a.id}>
                 <span className={`tl-dot ${a.event.includes('error') || a.event.includes('down') || a.event.includes('fenced') || a.event.includes('banned') ? 'bad' : a.event.includes('completed') ? 'good' : ''}`} />
                 <div>
-                  <div><strong>{a.name || a.nodeId || 'Fleet'}</strong> {EVENT_TEXT[a.event] || a.event}</div>
+                  <div><strong>{a.name || a.nodeId || a.userName || 'Fleet'}</strong> {EVENT_TEXT[a.event] || a.event}</div>
                   <div className="small muted">
                     {a.nodeId && <span><Icon name="server" size={12} /> {a.nodeId} </span>}
                     {a.requestId && <span className="mono">req {a.requestId.slice(0, 24)} </span>}

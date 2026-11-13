@@ -81,6 +81,7 @@ export function Detail({ t, onClose }: { t: Transfer; onClose: () => void }) {
               <div><dt>Received</dt><dd>{bytes(t.downloaded)}</dd></div>
               <div><dt>Sent</dt><dd>{bytes(t.uploaded)}</dd></div>
               <div><dt>From local cache</dt><dd>{bytes(t.dedupBytes)}</dd></div>
+              {t.origin && <div><dt>From origin</dt><dd>{bytes(t.originBytes)} <span className="muted">({t.origin})</span></dd></div>}
               <div><dt>Wasted</dt><dd>{bytes(d?.wasted || 0)}</dd></div>
               <div><dt>Added</dt><dd>{ago(t.addedAt)}{t.uploadedBy ? ` by ${t.uploadedBy.username}` : ''}</dd></div>
               <div><dt>Completed</dt><dd>{t.completedAt ? ago(t.completedAt) : '—'}</dd></div>
@@ -100,8 +101,7 @@ export function Detail({ t, onClose }: { t: Transfer; onClose: () => void }) {
         <Confirm title="Delete transfer?" danger confirmLabel="Delete" onClose={() => setConfirm(false)}
           body={<>Workers stop seeding <strong>{t.name}</strong> and the transfer disappears for everyone.</>}
           onConfirm={async () => { try { const r = await api.remove(t.id, deleteFiles); drop(t.id); toast('ok', r.message); onClose(); } catch (e) { toast('err', (e as Error).message); } }}>
-          <label className="check"><input type="checkbox" checked={deleteFiles} onChange={(e) => setDeleteFiles(e.target.checked)} />Also delete downloaded data on the workers</label>
-          {t.hasSource && <p className="small muted">The original uploaded file is kept either way.</p>}
+          <label className="check"><input type="checkbox" checked={deleteFiles} onChange={(e) => setDeleteFiles(e.target.checked)} />{t.hasSource ? 'Also delete the data, including the uploaded original' : 'Also delete downloaded data on the workers'}</label>
         </Confirm>
       )}
     </aside>

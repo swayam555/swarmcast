@@ -8,7 +8,7 @@ export interface Transfer {
   id: string; name: string; infoHash: string; magnetURI: string; size: number; status: Status; desired: string; replicas: string; error: string | null;
   progress: number; fleetProgress: number; downloadSpeed: number; uploadSpeed: number; downloaded: number; uploaded: number; dedupBytes: number; eta: number;
   seeds: number; leeches: number; peers: { connected: number; total: number }; completedPieces: number; totalPieces: number; files: FileEntry[]; trackers: string[];
-  addedAt: string; completedAt: string | null; isOwner: boolean; hasSource: boolean; uploadedBy: { _id: string; username: string } | null; nodes: NodePlacement[]; downloadable: boolean;
+  addedAt: string; completedAt: string | null; isOwner: boolean; hasSource: boolean; origin: string | null; originBytes: number; uploadedBy: { _id: string; username: string } | null; nodes: NodePlacement[]; downloadable: boolean;
 }
 export interface PeerInfo { address: string; client: string | null; source: string; downloadSpeed: number; uploadSpeed: number; progress: number; choked: boolean; choking: boolean; interested: boolean }
 export interface Detail {
@@ -21,7 +21,7 @@ export interface Sample { timestamp: number; downloadSpeed: number; uploadSpeed:
 export interface User { _id: string; username: string; email: string; role: 'user' | 'admin'; createdAt: string; google: boolean }
 export interface Settings { downloadPath: string; maxActiveTorrents: number; port: number; dht: GlobalStats['dht']; speedLimits: { download: number; upload: number }; trackers: string[]; bus: string; leases: string }
 export interface WorkerNode { id: string; host: string; peer_port: number; dht_port: number | null; status: string; started_at: string; heartbeat_at: string; stats: (FleetStats & { dht?: GlobalStats['dht']; held?: number }) | null }
-export interface Activity { id: number; event: string; detail: Record<string, unknown> | null; at: string; nodeId?: string | null; name?: string | null; requestId?: string | null }
+export interface Activity { id: number; event: string; detail: Record<string, unknown> | null; at: string; nodeId?: string | null; name?: string | null; requestId?: string | null; userName?: string | null }
 
 const TOKEN_KEY = 'shoal.token';
 export const auth = {
@@ -59,6 +59,7 @@ export const api = {
   detail: (id: string) => call<Detail>('GET', `/api/torrent/${id}/stats`),
   activity: (id: string) => call<Activity[]>('GET', `/api/torrent/${id}/activity`),
   addMagnet: (magnetURI: string, replicas: string) => call<Transfer>('POST', '/api/torrent/create', { magnetURI, replicas }),
+  fromUrl: (url: string, name: string, replicas: string) => call<Transfer>('POST', '/api/torrent/create-from-url', { url, name: name || undefined, replicas }),
   uploadTorrent: (file: File, replicas: string) => call<Transfer>('POST', `/api/torrent/upload?replicas=${encodeURIComponent(replicas)}`, file),
   shareFile: (file: File, replicas: string, onProgress?: (p: number) => void) => new Promise<Transfer>((resolve, reject) => {
     // XHR (not fetch) so we can report upload progress for large files.

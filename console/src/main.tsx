@@ -51,7 +51,7 @@ function App() {
   if (!user) return <Login onAuthed={() => { setChecking(true); load(); location.hash = '#/transfers'; }} />;
 
   const logout = () => { auth.clear(); disconnect(); setUser(null); location.hash = ''; };
-  const page = route === 'fleet' ? <Fleet /> : route === 'activity' ? <ActivityPage /> : route === 'settings' ? <Settings user={user} onUser={setUser} onLogout={logout} /> : <Transfers />;
+  const page = route === 'fleet' ? <Fleet /> : route === 'activity' ? <ActivityPage /> : route === 'settings' ? <Settings user={user} onUser={setUser} onLogout={logout} /> : <Transfers admin={user.role === 'admin'} />;
 
   return (
     <div className="shell">

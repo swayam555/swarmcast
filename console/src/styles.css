@@ -260,3 +260,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
   .page-head { align-items: center; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* fieldsets default to min-width: min-content and would push the page wider than a phone */
+fieldset { min-width: 0; }
+.grid-2 > *, .stack > * { min-width: 0; }

@@ -17,7 +17,7 @@ const env = process.env;
 const list = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
 
 export function loadConfig(overrides = {}) {
-  const dataDir = path.resolve(env.SHOAL_DATA_DIR || 'data');
+  const dataDir = path.resolve(overrides.dataDir || env.SHOAL_DATA_DIR || 'data');
   const port = Number(env.PORT || 3029);
   const publicUrl = env.SHOAL_PUBLIC_URL || `http://localhost:${port}`;
   const cfg = {

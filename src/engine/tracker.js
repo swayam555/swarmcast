@@ -4,6 +4,9 @@ import dgram from 'node:dgram';
 import { randomBytes } from 'node:crypto';
 import { decode, encode, text } from './bencode.js';
 import { decodeCompactPeers, encodeCompactPeers } from './wire.js';
+import { httpGet } from './origin.js';
+
+const MAX_TRACKER_REPLY = 1024 * 1024;
 
 const pct = (buf) => Array.from(buf).map((b) => `%${b.toString(16).padStart(2, '0')}`).join('');
 
@@ -19,8 +22,11 @@ async function announceHttp(url, { infoHash, peerId, port, uploaded = 0, downloa
     `port=${port}`, `uploaded=${uploaded}`, `downloaded=${downloaded}`, `left=${left}`,
     'compact=1', `numwant=${numwant}`, event ? `event=${event}` : '',
   ].filter(Boolean).join('&');
-  const res = await fetch(`${url}${url.includes('?') ? '&' : '?'}${qs}`, { signal: AbortSignal.timeout(10_000) });
-  const body = decode(Buffer.from(await res.arrayBuffer()));
+  // Trackers come from user-supplied magnets: bounded time and size, and no fetch() (see origin.js).
+  const res = await httpGet(`${url}${url.includes('?') ? '&' : '?'}${qs}`, { timeoutMs: 10_000 });
+  const chunks = []; let size = 0;
+  for await (const c of res) { size += c.length; if (size > MAX_TRACKER_REPLY) { res.destroy(); throw new Error('tracker reply too large'); } chunks.push(c); }
+  const body = decode(Buffer.concat(chunks));
   if (body['failure reason']) throw new Error(`tracker: ${text(body['failure reason'])}`);
   let peers = [];
   if (Buffer.isBuffer(body.peers)) peers = decodeCompactPeers(body.peers);

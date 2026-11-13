@@ -16,7 +16,7 @@ const matches = (t: Transfer, f: Filter) => f === 'all' ? true
   : f === 'paused' ? t.status === 'paused'
   : ['error', 'lost'].includes(t.status);
 
-export function Transfers() {
+export function Transfers({ admin = false }: { admin?: boolean }) {
   const live = useLive();
   const toast = useToast();
   const [adding, setAdding] = useState(false);
@@ -111,7 +111,7 @@ export function Transfers() {
       </section>
 
       {open && <Detail t={open} onClose={() => setOpenId(null)} />}
-      {adding && <AddPanel onClose={() => setAdding(false)} onAdded={(t) => setOpenId(t.id)} />}
+      {adding && <AddPanel admin={admin} onClose={() => setAdding(false)} onAdded={(t) => setOpenId(t.id)} />}
     </div>
   );
 }

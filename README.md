@@ -23,6 +23,7 @@ When fifty machines need the same 70 GB file at the same time, pulling it fifty 
 | **Protocol** (`src/engine`) | Bencode, .torrent creation/parsing (single and multi-file), magnet links (hex + base32), peer wire protocol (BEP 3), extension protocol (BEP 10), metadata exchange so magnets work without a .torrent (BEP 9), peer exchange (BEP 11), HTTP + UDP tracker clients (BEP 3/15/23), and a built-in HTTP tracker. |
 | **Swarm logic** | Rarest-first piece selection, 24-deep request pipelining, endgame mode capped at 2 requesters per block, tit-for-tat choking with a 30 s optimistic slot, bad-piece peer banning, request timeouts, token-bucket throttles. |
 | **DHT** (`src/dht`) | Kademlia routing table and KRPC over UDP: `ping`, `find_node`, `get_peers`, `announce_peer`, with rotating tokens. |
+| **HTTP origin** (`src/engine/origin.js`) | Cold start from object storage. `create-from-url` pulls an S3/GCS pre-signed URL (or any HTTP link) once and seeds it. A transfer can also carry an `originUrl`: when no peer delivers for 4 s, workers read missing pieces from it with Range requests, verify them, and serve them to the swarm. Admin-only, since it makes the fleet fetch URLs. |
 | **CAS** | Verified pieces are stored by SHA-256. A new artifact that shares pieces with an old one (e.g. a fine-tune of a checkpoint you already have) is filled from local disk, not the network. |
 | **Control plane** | Users (scrypt passwords, JWT, optional Google sign-in), transfers, per-worker placements, activity log, idempotency store, settings. |
 | **Workers** | Crash-only. Each placement is held under a lease with a fencing token. Progress writes are fenced, so a stalled worker that comes back can't overwrite its successor. A killed worker's lease expires and another worker resumes the transfer. |
@@ -76,8 +77,9 @@ shoal wait <id> --timeout 1800      # exits 0 once every placement is seeding
 | POST | `/api/auth/register`, `/api/auth/login`, `/api/auth/google` | JWT |
 | GET/PUT | `/api/user/profile`, PUT `/api/user/password`, GET `/api/user/history` | |
 | GET | `/api/torrent`, `/api/torrent/search?q=` | list, scoped to the user (admins see all) |
-| POST | `/api/torrent/create` | magnet `{magnetURI, replicas, autoStart}` |
-| POST | `/api/torrent/upload` | raw `.torrent` body |
+| POST | `/api/torrent/create` | magnet `{magnetURI, replicas, autoStart, originUrl?}` |
+| POST | `/api/torrent/upload` | raw `.torrent` body; `?originUrl=` adds an HTTP origin |
+| POST | `/api/torrent/create-from-url` | `{url, name?, replicas}`: pull from object storage once, then seed (admin) |
 | POST | `/api/torrent/create-from-file` | raw file body + `X-Filename`; hashed and seeded by a worker |
 | GET | `/api/torrent/:id`, `/:id/stats`, `/:id/activity`, `/:id/files`, `/:id/torrent`, `/:id/download` | `/download` streams a file, or a tar for folders |
 | POST | `/api/torrent/:id/start`, `/pause`, `/resume`, `/files/select` | |
@@ -90,7 +92,7 @@ shoal wait <id> --timeout 1800      # exits 0 once every placement is seeding
 ## Tests
 
 ```bash
-npm test     # 14 tests: protocol, DHT, leases, swarm, cluster, failover, CAS
+npm test     # 16 tests: protocol, DHT, leases, swarm, cluster, failover, CAS, HTTP origin
 KAFKA_BROKERS=localhost:9092 REDIS_URL=redis://localhost:6379 node --test test/kafka-redis.test.js
 npm run herd -- --nodes 20 --size-mb 32 --origin-limit-mb 20
 ```
@@ -101,6 +103,7 @@ What the suites check:
 - **Cluster**: an API plus three workers. One upload fans out to all three; a retry with the same request ID replays; pause and resume reach every worker; the browser download matches the source byte for byte; delete cleans up.
 - **Failover**: a worker is killed mid-transfer without releasing anything. Its lease expires, a new worker takes over and finishes, and the dead node is marked down.
 - **CAS**: v2 of an artifact shares 8 of 10 pieces with v1, so exactly 2 pieces cross the network.
+- **HTTP origin**: an artifact pulled from a URL reaches two workers while the object store is read once. A `.torrent` nobody seeds is filled from the origin with Range requests. An origin serving the wrong bytes never gets a piece written. Non-admins, `file://` and `user:pass@` URLs are refused.
 - **Kafka + Redis**: the same rollout with directives on Kafka and leases in Redis.
 
 ### Benchmark (`test/load/herd-report.json`, 20 nodes, 32 MiB, origin capped at 20 MB/s, one machine)
@@ -119,7 +122,7 @@ See `.env.example`. Key settings: `SHOAL_ROLE` (`all` / `api` / `worker`), `SHOA
 
 - State lives in SQLite. API and workers must share the database file: one host, or a shared volume as in the compose file. Kafka and Redis replace the bus and the leases, not the database.
 - Downloads through the console stream from the worker's disk, which again assumes a shared filesystem with the API.
-- There is no S3 or HTTP "first seed" yet. The first copy must come from an upload or from an existing BitTorrent seed.
+- An HTTP origin must support Range requests (S3, GCS, MinIO and nginx do). Magnet links still need one peer to supply the metadata before the origin can be used; use a `.torrent` or `create-from-url` for a true cold start.
 - IPv6 compact peers (BEP 7), uTP and protocol encryption aren't implemented.
 
 ## License

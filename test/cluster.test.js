@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, readdir } from 'node:fs/promises';
 import { randomBytes, createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
@@ -62,6 +62,8 @@ test('fleet rollout: one upload fans out to every worker, idempotent retries, pa
     const del = await fetch(`${base}/api/torrent/${t1.id}?deleteFiles=true`, { method: 'DELETE', headers: H });
     assert.equal(del.status, 200);
     await until(async () => (await fetch(`${base}/api/torrent/${t1.id}`, { headers: H })).status === 404);
+    // the staged upload is removed with the data
+    assert.deepEqual(await readdir(api.cfg.uploadDir).catch(() => []), []);
   } finally {
     for (const w of workers) await w.stop();
     await api.stop();

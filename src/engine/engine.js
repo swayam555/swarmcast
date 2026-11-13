@@ -109,7 +109,7 @@ export class Engine extends EventEmitter {
     const t = new Transfer(this, {
       infoHash, meta, name, announce, peers: [...peers, ...(opts.peers || [])],
       downloadPath: opts.downloadPath || this.settings.downloadPath,
-      selected: opts.selected, bitfieldHex: opts.bitfieldHex,
+      selected: opts.selected, bitfieldHex: opts.bitfieldHex, originUrl: opts.originUrl,
     });
     this.transfers.set(infoHash, t);
     for (const ev of ['state', 'progress', 'piece', 'complete', 'metadata', 'warning', 'peer:connected', 'peer:disconnected', 'peer:banned', 'verify:progress', 'files:selected']) {

@@ -120,7 +120,11 @@ export function createApp({ cfg, db, bus, metrics, leases, started = Date.now() 
       timestamp: new Date().toISOString(),
     });
   });
-  stats.get('/activity', (req, res) => res.json(db.all(`SELECT a.id, a.event, a.detail, a.at, a.node_id AS nodeId, a.request_id AS requestId, t.name FROM activity a LEFT JOIN transfers t ON t.id = a.transfer_id ORDER BY a.id DESC LIMIT ?`, Math.min(500, Number(req.query.limit) || 50)).map((a) => ({ ...a, detail: a.detail ? JSON.parse(a.detail) : null }))));
+  // Transfers are visible fleet-wide; account events (sign-ins, sign-ups) only to their owner and admins.
+  stats.get('/activity', (req, res) => res.json(db.all(`SELECT a.id, a.event, a.detail, a.at, a.node_id AS nodeId, a.request_id AS requestId, t.name, u.username AS userName
+    FROM activity a LEFT JOIN transfers t ON t.id = a.transfer_id LEFT JOIN users u ON u.id = a.user_id
+    WHERE ? = 'admin' OR a.event NOT LIKE 'user.%' OR a.user_id = ? ORDER BY a.id DESC LIMIT ?`,
+  req.user.role, req.user.id, Math.min(500, Number(req.query.limit) || 50)).map((a) => ({ ...a, detail: a.detail ? JSON.parse(a.detail) : null }))));
   app.use('/api/statistics', auth, stats);
 
   const settings = Router();

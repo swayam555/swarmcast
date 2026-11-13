@@ -150,7 +150,7 @@ export class Worker {
     const selected = tr.selected ? JSON.parse(tr.selected) : null;
     let hints = [];
     try { hints = parseMagnet(tr.magnet).peers; } catch { /* stored magnet without peer hints */ }
-    const opts = { autoStart: tr.desired === 'running', bitfieldHex: prev?.bitfield || undefined, peers: hints };
+    const opts = { autoStart: tr.desired === 'running', bitfieldHex: prev?.bitfield || undefined, peers: hints, originUrl: tr.origin_url || undefined };
     if (slot === 'origin') opts.downloadPath = path.dirname(tr.source_path);
     let t;
     try {
@@ -192,7 +192,7 @@ export class Worker {
       s.state, s.error, s.percentage, s.have, s.downloaded, s.uploaded, s.downloadSpeed, s.uploadSpeed,
       s.peers.connected, s.seeds, s.leeches, s.eta, s.completedPieces, s.dedupBytes,
       t.have && ['downloading', 'seeding', 'paused'].includes(t.state) ? t.have.toHex() : null, dataPath,
-      JSON.stringify({ pieceMap: compressMap(t.pieceMap()), peers: t.peerList(), files: t.fileList(), activePieces: s.activePieces, pendingRequests: s.pendingRequests, pieceCount: s.pieceCount, wasted: s.wasted, total: s.size }),
+      JSON.stringify({ pieceMap: compressMap(t.pieceMap()), peers: t.peerList(), files: t.fileList(), activePieces: s.activePieces, pendingRequests: s.pendingRequests, pieceCount: s.pieceCount, wasted: s.wasted, originBytes: s.originBytes, total: s.size }),
       now(), t.completedAt ? t.completedAt.toISOString() : null, tid, this.id, h.fence);
     }
   }

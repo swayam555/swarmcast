@@ -1,13 +1,16 @@
-// "New transfer": paste a magnet, drop a .torrent, or share any file from this browser.
+// "New transfer": paste a magnet, drop a .torrent, share any file from this browser,
+// or (admins) pull an artifact from an object-store URL.
 import { useRef, useState, type DragEvent } from 'react';
 import { api, bytes, type Transfer } from '../lib/api';
 import { upsert } from '../lib/live';
 import { Icon, Modal, useToast } from './ui';
 
-export function AddPanel({ onClose, onAdded }: { onClose: () => void; onAdded: (t: Transfer) => void }) {
+export function AddPanel({ admin = false, onClose, onAdded }: { admin?: boolean; onClose: () => void; onAdded: (t: Transfer) => void }) {
   const toast = useToast();
-  const [tab, setTab] = useState<'share' | 'magnet' | 'torrent'>('share');
+  const [tab, setTab] = useState<'share' | 'magnet' | 'torrent' | 'url'>('share');
   const [magnet, setMagnet] = useState('');
+  const [url, setUrl] = useState('');
+  const [urlName, setUrlName] = useState('');
   const [replicas, setReplicas] = useState('1');
   const [file, setFile] = useState<File | null>(null);
   const [over, setOver] = useState(false);
@@ -37,6 +40,9 @@ export function AddPanel({ onClose, onAdded }: { onClose: () => void; onAdded: (
       if (tab === 'magnet') {
         if (!magnet.trim().startsWith('magnet:?')) throw new Error('Paste a link that starts with magnet:?');
         t = await api.addMagnet(magnet.trim(), replicas);
+      } else if (tab === 'url') {
+        if (!/^https?:\/\//i.test(url.trim())) throw new Error('Paste an http(s) link, for example an S3 pre-signed URL');
+        t = await api.fromUrl(url.trim(), urlName.trim(), replicas);
       } else if (tab === 'torrent') {
         if (!file) throw new Error('Choose a .torrent file');
         t = await api.uploadTorrent(file, replicas);
@@ -56,14 +62,26 @@ export function AddPanel({ onClose, onAdded }: { onClose: () => void; onAdded: (
     <Modal title="New transfer" onClose={onClose}>
       <div className="modal-body">
         <div className="seg" role="tablist">
-          {(['share', 'magnet', 'torrent'] as const).map((k) => (
+          {(admin ? ['share', 'magnet', 'torrent', 'url'] as const : ['share', 'magnet', 'torrent'] as const).map((k) => (
             <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setError(null); }}>
-              {k === 'share' ? 'Share a file' : k === 'magnet' ? 'Magnet link' : '.torrent file'}
+              {k === 'share' ? 'Share a file' : k === 'magnet' ? 'Magnet link' : k === 'url' ? 'From a URL' : '.torrent file'}
             </button>
           ))}
         </div>
 
-        {tab === 'magnet' ? (
+        {tab === 'url' ? (
+          <>
+            <label className="field">
+              <span>Object-store or HTTP link</span>
+              <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://bucket.s3.amazonaws.com/model.safetensors?X-Amz-Signature=…" spellCheck={false} className="mono" />
+            </label>
+            <label className="field">
+              <span>Name <em className="muted">(optional, taken from the link otherwise)</em></span>
+              <input value={urlName} onChange={(e) => setUrlName(e.target.value)} maxLength={200} />
+            </label>
+            <p className="small muted">The control plane downloads it once, a worker seeds it, and the rest of the fleet gets it peer to peer. Pre-signed S3 or GCS links work.</p>
+          </>
+        ) : tab === 'magnet' ? (
           <label className="field">
             <span>Magnet link</span>
             <textarea rows={4} value={magnet} onChange={(e) => setMagnet(e.target.value)} placeholder="magnet:?xt=urn:btih:…" spellCheck={false} className="mono" />
