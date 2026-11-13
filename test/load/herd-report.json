@@ -1,0 +1,13 @@
+{
+  "nodes": 20,
+  "artifactMiB": 32,
+  "originEgressMiB": 52.7,
+  "naiveEgressMiB": 640,
+  "egressSaved": "91.8%",
+  "peerBytesMiB": 587.8,
+  "wastedMiB": 0.5,
+  "receivedMiB": 640.5,
+  "p50Ms": 15110,
+  "p95Ms": 15110,
+  "maxMs": 15110
+}

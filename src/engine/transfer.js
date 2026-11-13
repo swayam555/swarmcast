@@ -52,6 +52,7 @@ export class Transfer extends EventEmitter {
     const n = this.meta.pieces.length;
     this.have = this.restoredBitfield ? Bitfield.fromHex(n, this.restoredBitfield) : new Bitfield(n);
     this.availability = new Uint16Array(n);
+    this.writing = new Set();         // verified pieces whose disk write hasn't finished yet
     this.inflight = new Map();          // piece -> { blocks: Map(begin -> {peer, at}), received: Map(begin->buf), length }
     this.storage = new TorrentStorage(this.meta, this.downloadPath, { selected: this.selectedInit });
     this.wanted = new Bitfield(n);
@@ -207,7 +208,7 @@ export class Transfer extends EventEmitter {
     const addr = wire.address;
     const prior = this.peers.get(addr);
     if (prior) prior.wire.destroy();
-    const peer = { wire, addr, outgoing, have: null, requests: 0, down: new Meter(10_000), up: new Meter(10_000), connectedAt: Date.now(), client: null };
+    const peer = { wire, addr, outgoing, have: null, requests: 0, chokeEpoch: 0, cancelled: new Set(), down: new Meter(10_000), up: new Meter(10_000), connectedAt: Date.now(), client: null };
     this.peers.set(addr, peer);
     wire.peer = peer;
 
@@ -229,11 +230,13 @@ export class Transfer extends EventEmitter {
       this.updateInterest(peer);
     });
     wire.on('unchoke', () => this.pump());
-    wire.on('choke', () => this.releasePeer(peer));
-    wire.on('interested', () => this.rechoke());
-    wire.on('not_interested', () => this.rechoke());
+    // Blocks already on the wire still arrive after a choke; wait before handing their requests to someone else.
+    wire.on('choke', () => { clearTimeout(peer.chokeTimer); peer.chokeTimer = setTimeout(() => { if (peer.wire.peerChoking) { this.releasePeer(peer); this.pump(); } }, 1500); });
+    // Fill a free upload slot immediately; full re-ranking happens only on the 10 s timer.
+    wire.on('interested', () => { if ([...this.peers.values()].filter((p) => !p.wire.amChoking).length < UPLOAD_SLOTS) wire.unchoke(); });
     wire.on('piece', (i, begin, block) => this.onBlock(peer, i, begin, block));
-    wire.on('request', (i, begin, len) => this.onRequest(peer, i, begin, len));
+    wire.on('request', (i, begin, len) => { peer.cancelled.delete(`${i}:${begin}`); this.onRequest(peer, i, begin, len); });
+    wire.on('cancel', (i, begin) => peer.cancelled.add(`${i}:${begin}`));
     wire.on('extended_handshake', (d) => this.onExtHandshake(peer, d));
     wire.on('metadata', (m, payload) => this.onMetadataMsg(peer, m, payload));
     wire.on('pex', (d) => { if (Buffer.isBuffer(d.added)) decodeCompactPeers(d.added).forEach((a) => this.addPeer(a, 'pex')); });
@@ -253,7 +256,6 @@ export class Transfer extends EventEmitter {
     if (this.meta && this.have.count()) wire.bitfield(this.have.toBuffer());
     if (this.engine.dht) wire.port(this.engine.dht.port);
     this.emit('peer:connected', peer.addr);
-    this.rechoke();
   }
 
   updateInterest(peer) {
@@ -334,7 +336,7 @@ export class Transfer extends EventEmitter {
     // 2. start new pieces, rarest first
     const candidates = [];
     for (let i = 0; i < this.meta.pieces.length; i++) {
-      if (this.have.get(i) || !this.wanted.get(i) || !peer.have.get(i) || this.inflight.has(i)) continue;
+      if (this.have.get(i) || !this.wanted.get(i) || !peer.have.get(i) || this.inflight.has(i) || this.writing.has(i)) continue;
       candidates.push(i);
     }
     candidates.sort((a, b) => this.availability[a] - this.availability[b] || Math.random() - 0.5);
@@ -347,7 +349,7 @@ export class Transfer extends EventEmitter {
     if (!out.length && this.remainingWanted() <= this.meta.pieceLength * 4) {
       for (const [i, st] of this.inflight) {
         if (!peer.have.get(i)) continue;
-        for (const b of st.missing()) { if (out.length >= budget) break; if (!st.requested.get(b)?.has(peer.addr)) out.push([i, b]); }
+        for (const b of st.missing()) { if (out.length >= budget) break; const who = st.requested.get(b); if (!who?.has(peer.addr) && (who?.size || 0) < 2) out.push([i, b]); }
       }
     }
     return out;
@@ -403,7 +405,7 @@ export class Transfer extends EventEmitter {
     peer.down.add(block.length); this.down.add(block.length); this.downloaded += block.length;
     this.engine.onBytes('down', block.length);
     const st = this.inflight.get(i);
-    if (!st || this.have.get(i) || st.received.has(begin)) { this.wasted += block.length; this.pump(); return; }
+    if (!st || this.have.get(i) || this.writing.has(i) || st.received.has(begin)) { this.wasted += block.length; this.pump(); return; }
     st.received.set(begin, block);
     // endgame: cancel duplicates elsewhere
     const who = st.requested.get(begin);
@@ -417,7 +419,8 @@ export class Transfer extends EventEmitter {
         this.emit('warning', `piece ${i} failed hash check from ${peer.addr}`);
         if (peer.badPieces >= 3) { this.emit('peer:banned', peer.addr); this.failedAddrs.set(peer.addr, Date.now() + 3600_000); peer.wire.destroy(); }
       } else {
-        await this.storage.writePiece(i, data);
+        this.writing.add(i);
+        try { await this.storage.writePiece(i, data); } finally { this.writing.delete(i); }
         this.have.set(i);
         this.engine.cas?.put(this.meta.pieces[i].toString('hex'), data).catch(() => {});
         for (const p of this.peers.values()) p.wire.have(i);
@@ -442,9 +445,11 @@ export class Transfer extends EventEmitter {
   async onRequest(peer, i, begin, len) {
     if (!this.meta || peer.wire.amChoking || !this.have.get(i) || len > 128 * 1024) return;
     if (begin + len > pieceSize(this.meta, i)) return;
+    const epoch = peer.chokeEpoch;
     try {
       await this.engine.upThrottle.take(len);
-      if (peer.wire.closed || peer.wire.amChoking) return;
+      // Choking discards every request queued before it (BEP 3); cancels drop single blocks.
+      if (peer.wire.closed || peer.wire.amChoking || peer.chokeEpoch !== epoch || peer.cancelled.delete(`${i}:${begin}`)) return;
       const block = await this.storage.read(i, begin, len);
       peer.wire.piece(i, begin, block);
       peer.up.add(len); this.up.add(len); this.uploaded += len;
@@ -459,8 +464,16 @@ export class Transfer extends EventEmitter {
     interested.sort((a, b) => (seeding ? b.up.rate() - a.up.rate() : b.down.rate() - a.down.rate()));
     const keep = new Set(interested.slice(0, UPLOAD_SLOTS - 1));
     const rest = interested.filter((p) => !keep.has(p));
-    if (rest.length) keep.add(rest[Math.floor(Math.random() * rest.length)]);
-    for (const p of this.peers.values()) { if (keep.has(p)) p.wire.unchoke(); else p.wire.choke(); }
+    // Optimistic slot rotates every 30 s, not on every interest change, so peers aren't churned.
+    if (!this.optimistic || !rest.includes(this.optimistic) || Date.now() - (this.optimisticAt || 0) > 30_000) {
+      this.optimistic = rest.length ? rest[Math.floor(Math.random() * rest.length)] : null;
+      this.optimisticAt = Date.now();
+    }
+    if (this.optimistic) keep.add(this.optimistic);
+    for (const p of this.peers.values()) {
+      if (keep.has(p)) p.wire.unchoke();
+      else if (!p.wire.amChoking) { p.wire.choke(); p.chokeEpoch++; p.cancelled.clear(); }
+    }
   }
 
   sendPex() {
