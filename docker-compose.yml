@@ -1,0 +1,77 @@
+# Default: control plane (with its own worker) + two more workers, SQLite bus + leases on a shared volume.
+#   docker compose up -d --scale worker=4
+# Kafka + Redis plumbing:  SHOAL_BUS=kafka SHOAL_LEASES=redis docker compose --profile kafka up -d
+# Prometheus + Grafana:    docker compose --profile observability up -d   → http://localhost:3000
+x-shoal: &shoal
+  build: .
+  image: shoal:local
+  restart: unless-stopped
+  volumes: [shoal-data:/data]
+
+x-env: &env
+  SHOAL_DB: /data/shoal.db
+  SHOAL_UPLOAD_DIR: /data/uploads
+  SHOAL_DHT: "off"
+  SHOAL_BUS: ${SHOAL_BUS:-sqlite}
+  SHOAL_LEASES: ${SHOAL_LEASES:-sqlite}
+  KAFKA_BROKERS: kafka:9092
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: ${JWT_SECRET:-local-compose-secret-change-me}
+  NODE_ENV: development
+
+services:
+  api:
+    <<: *shoal
+    environment:
+      <<: *env
+      SHOAL_ROLE: all
+      SHOAL_DATA_DIR: /data/api
+      SHOAL_PUBLIC_URL: http://api:3029
+      SHOAL_CONSOLE_URL: http://localhost:3029
+      SHOAL_ADVERTISE_HOST: api
+    ports: ["3029:3029"]
+
+  worker:
+    <<: *shoal
+    deploy: { replicas: 2 }
+    depends_on: [api]
+    healthcheck: { disable: true }   # workers have no HTTP port; liveness = heartbeat in the DB
+    environment:
+      <<: *env
+      SHOAL_ROLE: worker
+      SHOAL_DATA_DIR: /tmp/worker
+      SHOAL_TRACKERS: http://api:3029/announce
+    command: ["sh", "-c", "SHOAL_ADVERTISE_HOST=$$(hostname -i) exec node src/server.js"]
+
+  kafka:
+    profiles: [kafka]
+    image: apache/kafka:3.8.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_HEAP_OPTS: -Xmx384m -Xms384m
+  redis:
+    profiles: [kafka]
+    image: redis:7-alpine
+
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v2.53.0
+    volumes: [./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro]
+    ports: ["9090:9090"]
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:11.1.0
+    environment: { GF_AUTH_ANONYMOUS_ENABLED: "true", GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer }
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+
+volumes:
+  shoal-data:

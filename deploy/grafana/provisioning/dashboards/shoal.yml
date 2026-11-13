@@ -1,0 +1,3 @@
+apiVersion: 1
+providers:
+  - { name: shoal, folder: Shoal, type: file, options: { path: /var/lib/grafana/dashboards } }

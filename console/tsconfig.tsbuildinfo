@@ -1,0 +1,1 @@
+{"root":["./src/main.tsx","./src/components/AddPanel.tsx","./src/components/Detail.tsx","./src/components/charts.tsx","./src/components/ui.tsx","./src/lib/api.ts","./src/lib/live.ts","./src/pages/Fleet.tsx","./src/pages/Login.tsx","./src/pages/Settings.tsx","./src/pages/Transfers.tsx"],"version":"5.8.3"}

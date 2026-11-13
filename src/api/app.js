@@ -1,5 +1,8 @@
 // Control-plane HTTP app: middleware chain, routes, error handling.
 import express, { Router } from 'express';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { authRoutes, userRoutes, requireAuth } from './auth.js';
 import { transferRoutes, downloadRoute, fleetStats, view } from './transfers.js';
@@ -149,7 +152,14 @@ export function createApp({ cfg, db, bus, metrics, leases, started = Date.now() 
   settings.get('/dht', (req, res) => res.json(dhtStatus(db)));
   app.use('/api/settings', auth, settings);
 
-  app.get('/', (req, res) => res.json({ name: 'Shoal control plane', docs: '/api/health', console: cfg.consoleUrl }));
+  // Serve the built console from the same origin when it exists (single-service deploys).
+  const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../console/dist');
+  if (existsSync(path.join(dist, 'index.html'))) {
+    app.use(express.static(dist, { index: false, maxAge: '1h' }));
+    app.get(/^\/(?!api\/|ws|announce|metrics).*/, (req, res) => res.sendFile(path.join(dist, 'index.html')));
+  } else {
+    app.get('/', (req, res) => res.json({ name: 'Shoal control plane', docs: '/api/health', console: cfg.consoleUrl }));
+  }
 
   app.use((req, res) => res.status(404).json({ error: `No route for ${req.method} ${req.path}` }));
   // eslint-disable-next-line no-unused-vars

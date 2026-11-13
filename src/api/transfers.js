@@ -37,7 +37,7 @@ export function view(db, tr, userId, { detail = false } = {}) {
     isOwner: tr.owner_id === userId, hasSource: Boolean(tr.source_path),
     uploadedBy: tr.owner_id ? { _id: tr.owner_id, username: tr.owner_name || 'unknown' } : null,
     nodes: pl.map((p) => ({ nodeId: p.node_id, host: p.host, nodeStatus: p.node_status, state: p.state, progress: p.progress, downloadSpeed: p.download_speed, uploadSpeed: p.upload_speed, peers: p.peers, dedupBytes: p.dedup_bytes, updatedAt: p.updated_at })),
-    downloadable: pl.some((p) => p.state === 'seeding' && p.data_path),
+    downloadable: pl.some((p) => p.progress >= 100 && p.data_path && p.state !== 'lost'),
   };
   if (detail) {
     out.detail = {
@@ -216,7 +216,8 @@ export function downloadRoute({ db }) {
     try {
       const tr = db.get('SELECT * FROM transfers WHERE id = ? OR info_hash = ?', req.params.id, String(req.params.id).toLowerCase());
       if (!tr) return res.status(404).json({ error: 'Transfer not found' });
-      const pl = db.get("SELECT data_path FROM placements WHERE transfer_id = ? AND state = 'seeding' AND data_path IS NOT NULL ORDER BY updated_at DESC LIMIT 1", tr.id);
+      // Any placement holding a complete copy will do, including paused ones.
+      const pl = db.get("SELECT data_path FROM placements WHERE transfer_id = ? AND progress >= 100 AND data_path IS NOT NULL AND state != 'lost' ORDER BY updated_at DESC LIMIT 1", tr.id);
       const p = pl?.data_path || tr.source_path;
       if (!p) return res.status(409).json({ error: 'Not downloaded yet' });
       const st = await stat(p).catch(() => null);
