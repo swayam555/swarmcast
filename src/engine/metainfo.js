@@ -35,7 +35,7 @@ async function walk(root) {
  * Hash a file or directory into a metainfo object.
  * Returns { torrent (Buffer), info, infoHash (hex), files, pieceLength, length }.
  */
-export async function createTorrent(srcPath, { announce = [], name, pieceLength, comment, createdBy = 'shoal/0.1', isPrivate = false } = {}) {
+export async function createTorrent(srcPath, { announce = [], name, pieceLength, comment, createdBy = 'swarmcast/0.1', isPrivate = false } = {}) {
   const files = await walk(srcPath);
   if (!files.length) throw new Error('nothing to share: no files found');
   const total = files.reduce((n, f) => n + f.length, 0);

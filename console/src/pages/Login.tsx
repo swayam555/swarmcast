@@ -39,9 +39,9 @@ export function Login({ onAuthed }: { onAuthed: () => void }) {
   return (
     <div className="login">
       <section className="login-pitch">
-        <div className="brand brand-lg"><Icon name="wave" size={26} />Shoal</div>
+        <div className="brand brand-lg"><Icon name="wave" size={26} />Swarmcast</div>
         <h1>Move a 70 GB checkpoint to fifty machines without paying for it fifty times.</h1>
-        <p>Shoal pulls an artifact once, verifies it piece by piece, and lets your workers hand pieces to each other over the local network. The origin sends about one copy and the fleet does the rest.</p>
+        <p>Swarmcast pulls an artifact once, verifies it piece by piece, and lets your workers hand pieces to each other over the local network. The origin sends about one copy and the fleet does the rest.</p>
         <ul className="pitch-points">
           <li><strong>~92% less origin egress</strong> in the bundled 20-node benchmark</li>
           <li><strong>Crash-only workers.</strong> Leases with fencing tokens hand work to a survivor.</li>

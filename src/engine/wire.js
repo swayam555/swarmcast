@@ -143,7 +143,7 @@ export class PeerWire extends EventEmitter {
   port(n) { const b = Buffer.alloc(3); b[0] = MSG.PORT; b.writeUInt16BE(n, 1); this.send(b); }
 
   extendedHandshake(extra = {}) {
-    this.send(Buffer.concat([Buffer.from([MSG.EXTENDED, 0]), encode({ m: LOCAL_EXT, v: 'Shoal 0.1', reqq: 250, ...extra })]));
+    this.send(Buffer.concat([Buffer.from([MSG.EXTENDED, 0]), encode({ m: LOCAL_EXT, v: 'Swarmcast 0.1', reqq: 250, ...extra })]));
   }
   extended(name, dict, trailer) {
     const id = this.remoteExt[name];

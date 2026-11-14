@@ -1,19 +1,19 @@
 # Default: control plane (with its own worker) + two more workers, SQLite bus + leases on a shared volume.
 #   docker compose up -d --scale worker=4
-# Kafka + Redis plumbing:  SHOAL_BUS=kafka SHOAL_LEASES=redis docker compose --profile kafka up -d
+# Kafka + Redis plumbing:  SWARMCAST_BUS=kafka SWARMCAST_LEASES=redis docker compose --profile kafka up -d
 # Prometheus + Grafana:    docker compose --profile observability up -d   → http://localhost:3000
-x-shoal: &shoal
+x-swarmcast: &swarmcast
   build: .
-  image: shoal:local
+  image: swarmcast:local
   restart: unless-stopped
-  volumes: [shoal-data:/data]
+  volumes: [swarmcast-data:/data]
 
 x-env: &env
-  SHOAL_DB: /data/shoal.db
-  SHOAL_UPLOAD_DIR: /data/uploads
-  SHOAL_DHT: "off"
-  SHOAL_BUS: ${SHOAL_BUS:-sqlite}
-  SHOAL_LEASES: ${SHOAL_LEASES:-sqlite}
+  SWARMCAST_DB: /data/swarmcast.db
+  SWARMCAST_UPLOAD_DIR: /data/uploads
+  SWARMCAST_DHT: "off"
+  SWARMCAST_BUS: ${SWARMCAST_BUS:-sqlite}
+  SWARMCAST_LEASES: ${SWARMCAST_LEASES:-sqlite}
   KAFKA_BROKERS: kafka:9092
   REDIS_URL: redis://redis:6379
   JWT_SECRET: ${JWT_SECRET:-local-compose-secret-change-me}
@@ -21,27 +21,27 @@ x-env: &env
 
 services:
   api:
-    <<: *shoal
+    <<: *swarmcast
     environment:
       <<: *env
-      SHOAL_ROLE: all
-      SHOAL_DATA_DIR: /data/api
-      SHOAL_PUBLIC_URL: http://api:3029
-      SHOAL_CONSOLE_URL: http://localhost:3029
-      SHOAL_ADVERTISE_HOST: api
+      SWARMCAST_ROLE: all
+      SWARMCAST_DATA_DIR: /data/api
+      SWARMCAST_PUBLIC_URL: http://api:3029
+      SWARMCAST_CONSOLE_URL: http://localhost:3029
+      SWARMCAST_ADVERTISE_HOST: api
     ports: ["3029:3029"]
 
   worker:
-    <<: *shoal
+    <<: *swarmcast
     deploy: { replicas: 2 }
     depends_on: [api]
     healthcheck: { disable: true }   # workers have no HTTP port; liveness = heartbeat in the DB
     environment:
       <<: *env
-      SHOAL_ROLE: worker
-      SHOAL_DATA_DIR: /tmp/worker
-      SHOAL_TRACKERS: http://api:3029/announce
-    command: ["sh", "-c", "SHOAL_ADVERTISE_HOST=$$(hostname -i) exec node src/server.js"]
+      SWARMCAST_ROLE: worker
+      SWARMCAST_DATA_DIR: /tmp/worker
+      SWARMCAST_TRACKERS: http://api:3029/announce
+    command: ["sh", "-c", "SWARMCAST_ADVERTISE_HOST=$$(hostname -i) exec node src/server.js"]
 
   kafka:
     profiles: [kafka]
@@ -74,4 +74,4 @@ services:
     ports: ["3000:3000"]
 
 volumes:
-  shoal-data:
+  swarmcast-data:

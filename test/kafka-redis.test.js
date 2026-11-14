@@ -6,7 +6,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { startShoal } from '../src/server.js';
+import { startSwarmcast } from '../src/server.js';
 import { createLeases } from '../src/cluster/leases.js';
 
 const live = process.env.KAFKA_BROKERS && process.env.REDIS_URL;
@@ -27,12 +27,12 @@ test('redis leases: exclusive, fenced', { skip: !live }, async () => {
 });
 
 test('kafka bus + redis leases: fleet rollout across two workers', { skip: !live }, async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'shoal-kafka-'));
-  const common = { dbFile: path.join(root, 'shoal.db'), peerPort: 0, dhtPort: 0, dht: false, logRequests: false, jwtSecret: 'k', busDriver: 'kafka', kafkaBrokers: process.env.KAFKA_BROKERS, leaseDriver: 'redis', redisUrl: process.env.REDIS_URL, trackers: [] };
-  const api = await startShoal({ ...common, dataDir: root, role: 'api', port: 0 });
+  const root = await mkdtemp(path.join(os.tmpdir(), 'swarmcast-kafka-'));
+  const common = { dbFile: path.join(root, 'swarmcast.db'), peerPort: 0, dhtPort: 0, dht: false, logRequests: false, jwtSecret: 'k', busDriver: 'kafka', kafkaBrokers: process.env.KAFKA_BROKERS, leaseDriver: 'redis', redisUrl: process.env.REDIS_URL, trackers: [] };
+  const api = await startSwarmcast({ ...common, dataDir: root, role: 'api', port: 0 });
   const base = `http://127.0.0.1:${api.server.address().port}`;
   const w = [];
-  for (const id of ['k1', 'k2']) w.push(await startShoal({ ...common, dataDir: path.join(root, id), role: 'worker', nodeId: `${id}-${Date.now()}` }));
+  for (const id of ['k1', 'k2']) w.push(await startSwarmcast({ ...common, dataDir: path.join(root, id), role: 'worker', nodeId: `${id}-${Date.now()}` }));
   try {
     const reg = await fetch(`${base}/api/auth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'kafka-ops', email: 'k@x.io', password: 'password123' }) }).then((r) => r.json());
     assert.ok(reg.token, JSON.stringify(reg));

@@ -1,6 +1,6 @@
 {
-  "title": "Shoal fleet",
-  "uid": "shoal-fleet",
+  "title": "Swarmcast fleet",
+  "uid": "swarmcast-fleet",
   "schemaVersion": 39,
   "refresh": "10s",
   "time": {
@@ -24,12 +24,12 @@
       },
       "targets": [
         {
-          "expr": "shoal_download_speed_bytes",
+          "expr": "swarmcast_download_speed_bytes",
           "refId": "A",
           "legendFormat": "download"
         },
         {
-          "expr": "shoal_upload_speed_bytes",
+          "expr": "swarmcast_upload_speed_bytes",
           "refId": "B",
           "legendFormat": "upload"
         }
@@ -51,7 +51,7 @@
       },
       "targets": [
         {
-          "expr": "shoal_active_workers",
+          "expr": "swarmcast_active_workers",
           "refId": "A",
           "legendFormat": ""
         }
@@ -73,7 +73,7 @@
       },
       "targets": [
         {
-          "expr": "shoal_queue_lag_seconds",
+          "expr": "swarmcast_queue_lag_seconds",
           "refId": "A",
           "legendFormat": ""
         }
@@ -95,7 +95,7 @@
       },
       "targets": [
         {
-          "expr": "sum(shoal_cas_dedup_bytes_total)",
+          "expr": "sum(swarmcast_cas_dedup_bytes_total)",
           "refId": "A",
           "legendFormat": ""
         }
@@ -117,7 +117,7 @@
       },
       "targets": [
         {
-          "expr": "shoal_transfers",
+          "expr": "swarmcast_transfers",
           "refId": "A",
           "legendFormat": "{{state}}"
         }
@@ -139,7 +139,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (route) (rate(shoal_http_requests_total[1m]))",
+          "expr": "sum by (route) (rate(swarmcast_http_requests_total[1m]))",
           "refId": "A",
           "legendFormat": "{{route}}"
         }
@@ -161,7 +161,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(shoal_http_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(swarmcast_http_request_duration_seconds_bucket[5m])))",
           "refId": "A",
           "legendFormat": "{{route}}"
         }
@@ -183,12 +183,12 @@
       },
       "targets": [
         {
-          "expr": "rate(shoal_lease_acquired_total[5m])",
+          "expr": "rate(swarmcast_lease_acquired_total[5m])",
           "refId": "A",
           "legendFormat": "acquired"
         },
         {
-          "expr": "rate(shoal_lease_lost_total[5m])",
+          "expr": "rate(swarmcast_lease_lost_total[5m])",
           "refId": "B",
           "legendFormat": "lost"
         }
@@ -210,7 +210,7 @@
       },
       "targets": [
         {
-          "expr": "rate(shoal_idempotent_replays_total[5m])",
+          "expr": "rate(swarmcast_idempotent_replays_total[5m])",
           "refId": "A",
           "legendFormat": ""
         }

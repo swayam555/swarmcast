@@ -64,7 +64,7 @@ export class Engine extends EventEmitter {
 
   onBytes(dir, n) {
     (dir === 'down' ? this.down : this.up).add(n);
-    this.metrics?.inc(dir === 'down' ? 'shoal_bytes_downloaded_total' : 'shoal_bytes_uploaded_total', n);
+    this.metrics?.inc(dir === 'down' ? 'swarmcast_bytes_downloaded_total' : 'swarmcast_bytes_uploaded_total', n);
   }
 
   isSelf(addr) {

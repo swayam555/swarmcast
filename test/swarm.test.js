@@ -14,7 +14,7 @@ const until = (fn, ms = 30000) => new Promise((res, rej) => {
 });
 
 test('magnet download from a seed, then a third peer fetches from both', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'shoal-swarm-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'swarmcast-swarm-'));
   const src = path.join(root, 'seed', 'model');
   await mkdir(src, { recursive: true });
   const a = randomBytes(3 * 1024 * 1024 + 777); const b = randomBytes(512 * 1024 + 3);

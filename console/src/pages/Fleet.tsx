@@ -16,13 +16,13 @@ export function Fleet() {
       <header className="page-head"><div><h1>Fleet</h1><p className="muted">Workers, peer discovery and the local cache.</p></div></header>
       <section className="tiles">
         <div className="tile"><span className="tile-k">Workers up</span><span className="tile-v">{up.length}<small> / {nodes?.length ?? '—'}</small></span><span className="tile-s">heartbeat every 3 s, down after 20 s</span></div>
-        <div className="tile"><span className="tile-k">DHT</span><span className="tile-v">{g?.dht.running ? `${g.dht.nodes} nodes` : 'off'}</span><span className="tile-s">{g?.dht.running ? `UDP ${g.dht.port}` : 'set SHOAL_DHT=on to join'}</span></div>
+        <div className="tile"><span className="tile-k">DHT</span><span className="tile-v">{g?.dht.running ? `${g.dht.nodes} nodes` : 'off'}</span><span className="tile-s">{g?.dht.running ? `UDP ${g.dht.port}` : 'set SWARMCAST_DHT=on to join'}</span></div>
         <div className="tile"><span className="tile-k">Built-in tracker</span><span className="tile-v">{g?.tracker.swarms ?? 0} swarms</span><span className="tile-s">{g?.tracker.peers ?? 0} announced peers</span></div>
         <div className="tile"><span className="tile-k">Cache savings</span><span className="tile-v">{bytes(g?.cas.dedupBytes || 0)}</span><span className="tile-s">pieces reused instead of downloaded</span></div>
       </section>
       <section className="panel">
         <div className="panel-head"><h2>Workers</h2><span className="muted small">Start more with <code>npm run worker</code></span></div>
-        {nodes === null ? <div className="skeleton" /> : !nodes.length ? <Empty icon="server" title="No workers registered"><p className="muted">Start one with <code>SHOAL_ROLE=worker npm start</code>.</p></Empty> : (
+        {nodes === null ? <div className="skeleton" /> : !nodes.length ? <Empty icon="server" title="No workers registered"><p className="muted">Start one with <code>SWARMCAST_ROLE=worker npm start</code>.</p></Empty> : (
           <div className="table-wrap">
             <table className="table">
               <thead><tr><th>Worker</th><th>Peer port</th><th>Holding</th><th>Speed</th><th>Moved</th><th>DHT</th><th>Heartbeat</th></tr></thead>

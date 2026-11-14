@@ -1,13 +1,13 @@
 // Directive bus between the control plane and workers.
 // 'sqlite' (default): an append-only directives table that workers tail.
-// 'kafka': topic shoal.jobs.dispatch (keyed by transfer id) + shoal.events.
+// 'kafka': topic swarmcast.jobs.dispatch (keyed by transfer id) + swarmcast.events.
 // Directives are nudges; the desired state on the transfer row is authoritative,
 // so a lost or duplicated message can't put the fleet in a wrong state.
 
-export const TOPIC_JOBS = 'shoal.jobs.dispatch';
-export const TOPIC_EVENTS = 'shoal.events';
+export const TOPIC_JOBS = 'swarmcast.jobs.dispatch';
+export const TOPIC_EVENTS = 'swarmcast.events';
 
-export function createBus({ driver = 'sqlite', db, brokers, clientId = 'shoal' } = {}) {
+export function createBus({ driver = 'sqlite', db, brokers, clientId = 'swarmcast' } = {}) {
   if (driver === 'kafka') return new KafkaBus(brokers, clientId);
   return new SqliteBus(db);
 }

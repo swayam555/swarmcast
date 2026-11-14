@@ -1,10 +1,10 @@
 {
-  "name": "shoal",
+  "name": "swarmcast",
   "version": "0.1.0",
   "description": "Peer-assisted distribution of large artifacts (model checkpoints, datasets, images) over the BitTorrent wire protocol, with a control plane, worker leases and a live console.",
   "type": "module",
   "main": "src/server.js",
-  "bin": { "shoal": "./bin/shoal.js" },
+  "bin": { "swarmcast": "./bin/swarmcast.js" },
   "engines": { "node": ">=22.5" },
   "scripts": {
     "start": "node src/server.js",

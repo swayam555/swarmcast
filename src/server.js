@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Entry point. SHOAL_ROLE = all (API + embedded worker, default) | api | worker.
+// Entry point. SWARMCAST_ROLE = all (API + embedded worker, default) | api | worker.
 import http from 'node:http';
 import path from 'node:path';
 import { WebSocketServer } from 'ws';
@@ -17,38 +17,38 @@ const env = process.env;
 const list = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
 
 export function loadConfig(overrides = {}) {
-  const dataDir = path.resolve(overrides.dataDir || env.SHOAL_DATA_DIR || 'data');
+  const dataDir = path.resolve(overrides.dataDir || env.SWARMCAST_DATA_DIR || 'data');
   const port = Number(env.PORT || 3029);
-  const publicUrl = env.SHOAL_PUBLIC_URL || `http://localhost:${port}`;
+  const publicUrl = env.SWARMCAST_PUBLIC_URL || `http://localhost:${port}`;
   const cfg = {
-    role: env.SHOAL_ROLE || 'all',
+    role: env.SWARMCAST_ROLE || 'all',
     port, publicUrl, dataDir,
-    dbFile: env.SHOAL_DB || path.join(dataDir, 'shoal.db'),
-    uploadDir: env.SHOAL_UPLOAD_DIR || path.join(dataDir, 'uploads'),
-    maxUpload: env.SHOAL_MAX_UPLOAD || '2gb',
+    dbFile: env.SWARMCAST_DB || path.join(dataDir, 'swarmcast.db'),
+    uploadDir: env.SWARMCAST_UPLOAD_DIR || path.join(dataDir, 'uploads'),
+    maxUpload: env.SWARMCAST_MAX_UPLOAD || '2gb',
     jwtSecret: env.JWT_SECRET || 'dev-only-change-me',
-    serviceToken: env.SHOAL_SERVICE_TOKEN || null,
+    serviceToken: env.SWARMCAST_SERVICE_TOKEN || null,
     googleClientId: env.GOOGLE_CLIENT_ID || null,
     googleClientSecret: env.GOOGLE_CLIENT_SECRET || null,
-    consoleUrl: env.SHOAL_CONSOLE_URL || 'http://localhost:5173',
+    consoleUrl: env.SWARMCAST_CONSOLE_URL || 'http://localhost:5173',
     corsOrigins: list(env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173'),
-    busDriver: env.SHOAL_BUS || 'sqlite', kafkaBrokers: env.KAFKA_BROKERS,
-    leaseDriver: env.SHOAL_LEASES || 'sqlite', redisUrl: env.REDIS_URL,
-    peerPort: Number(env.SHOAL_PEER_PORT ?? 6881),
-    dhtPort: Number(env.SHOAL_DHT_PORT ?? 6881),
-    dht: env.SHOAL_DHT !== 'off',
-    dhtBootstrap: list(env.SHOAL_DHT_BOOTSTRAP),
-    trackerInterval: Number(env.SHOAL_TRACKER_INTERVAL || 30),
-    logRequests: env.SHOAL_LOG_REQUESTS !== 'off',
+    busDriver: env.SWARMCAST_BUS || 'sqlite', kafkaBrokers: env.KAFKA_BROKERS,
+    leaseDriver: env.SWARMCAST_LEASES || 'sqlite', redisUrl: env.REDIS_URL,
+    peerPort: Number(env.SWARMCAST_PEER_PORT ?? 6881),
+    dhtPort: Number(env.SWARMCAST_DHT_PORT ?? 6881),
+    dht: env.SWARMCAST_DHT !== 'off',
+    dhtBootstrap: list(env.SWARMCAST_DHT_BOOTSTRAP),
+    trackerInterval: Number(env.SWARMCAST_TRACKER_INTERVAL || 30),
+    logRequests: env.SWARMCAST_LOG_REQUESTS !== 'off',
     ...overrides,
   };
   // The control plane's own /announce tracker is always offered to swarms it creates.
-  cfg.trackers = overrides.trackers || [...new Set([`${publicUrl}/announce`, ...list(env.SHOAL_TRACKERS)])];
+  cfg.trackers = overrides.trackers || [...new Set([`${publicUrl}/announce`, ...list(env.SWARMCAST_TRACKERS)])];
   if (cfg.jwtSecret === 'dev-only-change-me' && env.NODE_ENV === 'production') throw new Error('JWT_SECRET must be set in production');
   return cfg;
 }
 
-export async function startShoal(overrides = {}) {
+export async function startSwarmcast(overrides = {}) {
   const cfg = loadConfig(overrides);
   const db = openDb(cfg.dbFile);
   const metrics = new Metrics();
@@ -58,7 +58,7 @@ export async function startShoal(overrides = {}) {
 
   if (cfg.role === 'all' || cfg.role === 'worker') {
     out.worker = await new Worker({
-      db, bus, leases, metrics, dataDir: path.join(cfg.dataDir, 'worker'), nodeId: overrides.nodeId || env.SHOAL_NODE_ID,
+      db, bus, leases, metrics, dataDir: path.join(cfg.dataDir, 'worker'), nodeId: overrides.nodeId || env.SWARMCAST_NODE_ID,
       peerPort: cfg.peerPort, dhtPort: cfg.dhtPort, dht: cfg.dht, dhtBootstrap: cfg.dhtBootstrap, trackers: cfg.trackers,
     }).start();
   }
@@ -72,14 +72,14 @@ export async function startShoal(overrides = {}) {
     const sweeper = setInterval(() => sweep(db, leases), 5000); sweeper.unref();
     metrics.collect((m) => {
       const states = db.all('SELECT state, COUNT(*) AS n FROM placements GROUP BY state');
-      for (const s of ['downloading', 'seeding', 'paused', 'queued', 'checking', 'error', 'fetching_metadata']) m.set('shoal_transfers', states.find((x) => x.state === s)?.n || 0, { state: s });
+      for (const s of ['downloading', 'seeding', 'paused', 'queued', 'checking', 'error', 'fetching_metadata']) m.set('swarmcast_transfers', states.find((x) => x.state === s)?.n || 0, { state: s });
       const f = fleetStats(db);
-      m.set('shoal_active_workers', f.workers); m.set('shoal_download_speed_bytes', f.totalDownloadSpeed); m.set('shoal_upload_speed_bytes', f.totalUploadSpeed);
-      m.set('shoal_queue_lag_seconds', bus.lag() / 1000);
+      m.set('swarmcast_active_workers', f.workers); m.set('swarmcast_download_speed_bytes', f.totalDownloadSpeed); m.set('swarmcast_upload_speed_bytes', f.totalUploadSpeed);
+      m.set('swarmcast_queue_lag_seconds', bus.lag() / 1000);
     });
     await new Promise((r) => server.listen(cfg.port, r));
     out.server = server; out.app = app;
-    console.log(JSON.stringify({ level: 'info', msg: `Shoal control plane on :${server.address().port}`, role: cfg.role, bus: bus.kind, leases: leases.kind }));
+    console.log(JSON.stringify({ level: 'info', msg: `Swarmcast control plane on :${server.address().port}`, role: cfg.role, bus: bus.kind, leases: leases.kind }));
   }
 
   out.stop = async () => {
@@ -131,7 +131,7 @@ function attachSockets(server, { cfg, db, history, metrics }) {
   const tick = setInterval(() => {
     const f = fleetStats(db);
     history.push(f.totalDownloadSpeed, f.totalUploadSpeed);
-    metrics.set('shoal_ws_clients', wss.clients.size);
+    metrics.set('swarmcast_ws_clients', wss.clients.size);
     const events = db.all('SELECT a.id, a.event, a.transfer_id AS transferId, a.node_id AS nodeId, a.detail, a.at, t.name, t.owner_id FROM activity a LEFT JOIN transfers t ON t.id = a.transfer_id WHERE a.id > ? ORDER BY a.id LIMIT 100', lastActivity);
     if (events.length) lastActivity = events[events.length - 1].id;
     if (!wss.clients.size) return;
@@ -156,7 +156,7 @@ function attachSockets(server, { cfg, db, history, metrics }) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('/src/server.js')) {
-  const s = await startShoal();
+  const s = await startSwarmcast();
   const shutdown = async () => { await s.stop().catch(() => {}); process.exit(0); };
   process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
 }

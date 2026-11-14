@@ -1,4 +1,4 @@
-// Typed client for the Shoal control plane.
+// Typed client for the Swarmcast control plane.
 
 export type Status = 'pending' | 'queued' | 'checking' | 'fetching_metadata' | 'downloading' | 'seeding' | 'paused' | 'error' | 'stopped' | 'lost' | 'removing';
 
@@ -23,7 +23,7 @@ export interface Settings { downloadPath: string; maxActiveTorrents: number; por
 export interface WorkerNode { id: string; host: string; peer_port: number; dht_port: number | null; status: string; started_at: string; heartbeat_at: string; stats: (FleetStats & { dht?: GlobalStats['dht']; held?: number }) | null }
 export interface Activity { id: number; event: string; detail: Record<string, unknown> | null; at: string; nodeId?: string | null; name?: string | null; requestId?: string | null; userName?: string | null }
 
-const TOKEN_KEY = 'shoal.token';
+const TOKEN_KEY = 'swarmcast.token';
 export const auth = {
   get token() { return localStorage.getItem(TOKEN_KEY); },
   set(t: string) { localStorage.setItem(TOKEN_KEY, t); },
@@ -38,7 +38,7 @@ async function call<T>(method: string, path: string, body?: unknown, init: Reque
   if (body !== undefined && !(body instanceof Blob) && !(body instanceof ArrayBuffer)) headers['content-type'] = 'application/json';
   const res = await fetch(path, { ...init, method, headers, body: body === undefined ? undefined : body instanceof Blob || body instanceof ArrayBuffer ? body : JSON.stringify(body) });
   const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
-  if (res.status === 401 && auth.token) { auth.clear(); window.dispatchEvent(new Event('shoal:logout')); }
+  if (res.status === 401 && auth.token) { auth.clear(); window.dispatchEvent(new Event('swarmcast:logout')); }
   if (!res.ok) throw new ApiError(res.status, data?.error || res.statusText);
   return data as T;
 }

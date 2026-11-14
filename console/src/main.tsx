@@ -45,7 +45,7 @@ function App() {
     try { setUser(await api.profile()); connect(); } catch { auth.clear(); setUser(null); } finally { setChecking(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { const out = () => { disconnect(); setUser(null); }; window.addEventListener('shoal:logout', out); return () => window.removeEventListener('shoal:logout', out); }, []);
+  useEffect(() => { const out = () => { disconnect(); setUser(null); }; window.addEventListener('swarmcast:logout', out); return () => window.removeEventListener('swarmcast:logout', out); }, []);
 
   if (checking) return <div className="boot"><Icon name="wave" size={32} /></div>;
   if (!user) return <Login onAuthed={() => { setChecking(true); load(); location.hash = '#/transfers'; }} />;
@@ -56,7 +56,7 @@ function App() {
   return (
     <div className="shell">
       <aside className="side">
-        <a className="brand" href="#/transfers"><Icon name="wave" size={22} />Shoal</a>
+        <a className="brand" href="#/transfers"><Icon name="wave" size={22} />Swarmcast</a>
         <nav>
           {ROUTES.map((r) => (
             <a key={r.path} href={`#/${r.path}`} className={route === r.path ? 'on' : ''} aria-current={route === r.path ? 'page' : undefined}>

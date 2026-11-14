@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// shoal — CLI for pipelines and operators.
-//   shoal login <email>                    (prompts for password, stores token)
-//   shoal push <file|dir> [--replicas all] [--request-id id]
-//   shoal add <magnet> [--replicas n] [--request-id id]
-//   shoal ls | status <id> | pause <id> | resume <id> | rm <id> [--delete-files]
-//   shoal wait <id> [--timeout 600]        (exit 0 when every placement is seeding)
-//   shoal pull <id> [-o out]               (download a finished artifact)
-//   shoal create <path> [-o x.torrent] [--tracker url]   (offline .torrent creation)
-//   shoal seed <path> | get <magnet> [-o dir]            (standalone peer, no server)
+// swarmcast — CLI for pipelines and operators.
+//   swarmcast login <email>                    (prompts for password, stores token)
+//   swarmcast push <file|dir> [--replicas all] [--request-id id]
+//   swarmcast add <magnet> [--replicas n] [--request-id id]
+//   swarmcast ls | status <id> | pause <id> | resume <id> | rm <id> [--delete-files]
+//   swarmcast wait <id> [--timeout 600]        (exit 0 when every placement is seeding)
+//   swarmcast pull <id> [-o out]               (download a finished artifact)
+//   swarmcast create <path> [-o x.torrent] [--tracker url]   (offline .torrent creation)
+//   swarmcast seed <path> | get <magnet> [-o dir]            (standalone peer, no server)
 import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { Readable } from 'node:stream';
@@ -16,19 +16,19 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 
-const CONF = path.join(os.homedir(), '.config', 'shoal', 'cli.json');
+const CONF = path.join(os.homedir(), '.config', 'swarmcast', 'cli.json');
 const args = process.argv.slice(2);
 const flag = (name, def) => { const i = args.indexOf(name); if (i < 0) return def; const v = args[i + 1]; args.splice(i, 2); return v; };
 const bool = (name) => { const i = args.indexOf(name); if (i < 0) return false; args.splice(i, 1); return true; };
 
 const human = (n) => { const u = ['B', 'KiB', 'MiB', 'GiB', 'TiB']; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return `${n.toFixed(i ? 1 : 0)} ${u[i]}`; };
-const die = (m) => { console.error(`shoal: ${m}`); process.exit(1); };
+const die = (m) => { console.error(`swarmcast: ${m}`); process.exit(1); };
 
 async function conf() { try { return JSON.parse(await readFile(CONF, 'utf8')); } catch { return {}; } }
 async function api(method, p, { body, headers = {}, raw } = {}) {
   const c = await conf();
-  const base = process.env.SHOAL_URL || c.url || 'http://localhost:3029';
-  const token = process.env.SHOAL_TOKEN || c.token;
+  const base = process.env.SWARMCAST_URL || c.url || 'http://localhost:3029';
+  const token = process.env.SWARMCAST_TOKEN || c.token;
   const res = await fetch(`${base}${p}`, {
     method, body: raw ?? (body ? JSON.stringify(body) : undefined), duplex: raw ? 'half' : undefined,
     headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}), ...headers },
@@ -54,10 +54,10 @@ const resolveId = async (prefix) => {
 
 const cmds = {
   async login(email) {
-    if (!email) die('usage: shoal login <email>');
-    const url = flag('--url', process.env.SHOAL_URL || 'http://localhost:3029');
+    if (!email) die('usage: swarmcast login <email>');
+    const url = flag('--url', process.env.SWARMCAST_URL || 'http://localhost:3029');
     const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
-    const password = process.env.SHOAL_PASSWORD || await new Promise((r) => rl.question('Password: ', r));
+    const password = process.env.SWARMCAST_PASSWORD || await new Promise((r) => rl.question('Password: ', r));
     rl.close();
     const res = await fetch(`${url}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password }) });
     const data = await res.json();
@@ -67,9 +67,9 @@ const cmds = {
     console.log(`Logged in as ${data.user.username} → ${url}`);
   },
   async push(file) {
-    if (!file) die('usage: shoal push <file>');
+    if (!file) die('usage: swarmcast push <file>');
     const st = await stat(file).catch(() => die(`no such file ${file}`));
-    if (!st.isFile()) die('push takes a single file; for folders use `shoal create` and `shoal add`');
+    if (!st.isFile()) die('push takes a single file; for folders use `swarmcast create` and `swarmcast add`');
     const replicas = flag('--replicas', '1'); const rid = flag('--request-id');
     const { data } = await api('POST', `/api/torrent/create-from-file?replicas=${encodeURIComponent(replicas)}`, {
       raw: Readable.toWeb(createReadStream(file)), headers: { 'x-filename': encodeURIComponent(path.basename(file)), 'content-length': String(st.size), ...(rid ? { 'x-request-id': rid } : {}) },
@@ -77,7 +77,7 @@ const cmds = {
     console.log(row(data)); console.log(data.magnetURI);
   },
   async add(magnet) {
-    if (!magnet) die('usage: shoal add <magnet>');
+    if (!magnet) die('usage: swarmcast add <magnet>');
     const replicas = flag('--replicas', '1'); const rid = flag('--request-id');
     const { data, res } = await api('POST', '/api/torrent/create', { body: { magnetURI: magnet, replicas }, headers: rid ? { 'x-request-id': rid } : {} });
     if (res.headers.get('idempotent-replay')) console.error('(replayed: this request id was already processed)');
@@ -112,7 +112,7 @@ const cmds = {
     console.log(`saved ${out}`);
   },
   async create(src) {
-    if (!src) die('usage: shoal create <path> [-o file.torrent] [--tracker url]');
+    if (!src) die('usage: swarmcast create <path> [-o file.torrent] [--tracker url]');
     const { createTorrent, toMagnet } = await import('../src/engine/metainfo.js');
     const trackers = []; let t; while ((t = flag('--tracker'))) trackers.push(t);
     const meta = await createTorrent(src, { announce: trackers });
@@ -122,19 +122,19 @@ const cmds = {
     console.log(toMagnet(meta));
   },
   async seed(src) {
-    if (!src) die('usage: shoal seed <path>');
+    if (!src) die('usage: swarmcast seed <path>');
     const { Engine } = await import('../src/engine/engine.js');
     const { toMagnet } = await import('../src/engine/metainfo.js');
-    const e = await new Engine({ dataDir: path.join(os.tmpdir(), 'shoal-cli'), port: Number(flag('--port', '0')) }).start();
+    const e = await new Engine({ dataDir: path.join(os.tmpdir(), 'swarmcast-cli'), port: Number(flag('--port', '0')) }).start();
     const t = await e.seed(src);
     console.log(`${toMagnet(t)}&x.pe=${flag('--host', '127.0.0.1')}:${e.port}`);
     setInterval(() => process.stderr.write(`\r${t.state}  peers:${t.peers.size}  ↑${human(t.up.rate())}/s  sent ${human(t.uploaded)}   `), 1000);
   },
   async get(magnet) {
-    if (!magnet) die('usage: shoal get <magnet> [-o dir]');
+    if (!magnet) die('usage: swarmcast get <magnet> [-o dir]');
     const { Engine } = await import('../src/engine/engine.js');
     const out = path.resolve(flag('-o', '.'));
-    const e = await new Engine({ dataDir: path.join(os.tmpdir(), 'shoal-cli'), downloadPath: out, port: 0 }).start();
+    const e = await new Engine({ dataDir: path.join(os.tmpdir(), 'swarmcast-cli'), downloadPath: out, port: 0 }).start();
     const t = e.add(magnet);
     const timer = setInterval(async () => {
       const s = t.snapshot();
@@ -146,7 +146,7 @@ const cmds = {
 
 const [cmd, ...rest] = args;
 if (!cmd || !cmds[cmd]) {
-  console.log('usage: shoal <login|push|add|ls|status|pause|resume|rm|wait|pull|create|seed|get> …');
+  console.log('usage: swarmcast <login|push|add|ls|status|pause|resume|rm|wait|pull|create|seed|get> …');
   process.exit(cmd ? 1 : 0);
 }
 await cmds[cmd](...rest);

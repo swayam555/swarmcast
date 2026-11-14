@@ -65,26 +65,26 @@ class RedisLeases {
   }
   async acquire(key, holder, ttlMs) {
     const r = await this.client();
-    const fence = await r.incr(`shoal:fence:${key}`);
-    const ok = await r.set(`shoal:lease:${key}`, `${holder}|${fence}`, 'PX', ttlMs, 'NX');
+    const fence = await r.incr(`swarmcast:fence:${key}`);
+    const ok = await r.set(`swarmcast:lease:${key}`, `${holder}|${fence}`, 'PX', ttlMs, 'NX');
     if (ok) return fence;
-    const cur = await r.get(`shoal:lease:${key}`);
-    if (cur && cur.startsWith(`${holder}|`)) { await r.pexpire(`shoal:lease:${key}`, ttlMs); return Number(cur.split('|')[1]); }
+    const cur = await r.get(`swarmcast:lease:${key}`);
+    if (cur && cur.startsWith(`${holder}|`)) { await r.pexpire(`swarmcast:lease:${key}`, ttlMs); return Number(cur.split('|')[1]); }
     return null;
   }
   async renew(key, holder, fence, ttlMs) {
     const r = await this.client();
     // compare-and-extend atomically
-    const res = await r.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('pexpire', KEYS[1], ARGV[2]) else return 0 end", 1, `shoal:lease:${key}`, `${holder}|${fence}`, ttlMs);
+    const res = await r.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('pexpire', KEYS[1], ARGV[2]) else return 0 end", 1, `swarmcast:lease:${key}`, `${holder}|${fence}`, ttlMs);
     return res === 1;
   }
   async release(key, holder, fence) {
     const r = await this.client();
-    await r.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, `shoal:lease:${key}`, `${holder}|${fence}`);
+    await r.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, `swarmcast:lease:${key}`, `${holder}|${fence}`);
   }
   async holder(key) {
     const r = await this.client();
-    const cur = await r.get(`shoal:lease:${key}`);
+    const cur = await r.get(`swarmcast:lease:${key}`);
     if (!cur) return null;
     const [holder, fence] = cur.split('|');
     return { holder, fence: Number(fence) };

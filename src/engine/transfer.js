@@ -148,7 +148,7 @@ export class Transfer extends EventEmitter {
       await this.storage.writePiece(i, data);
       this.have.set(i);
       this.dedupBytes += data.length;
-      this.engine.metrics?.inc('shoal_cas_dedup_bytes_total', data.length);
+      this.engine.metrics?.inc('swarmcast_cas_dedup_bytes_total', data.length);
     }
   }
 
@@ -464,7 +464,7 @@ export class Transfer extends EventEmitter {
       if (this.stopping || this.have.get(i)) return;
       this.down.add(len); this.downloaded += len; this.originBytes += len;
       this.engine.onBytes('down', len);
-      this.engine.metrics?.inc('shoal_origin_bytes_total', len);
+      this.engine.metrics?.inc('swarmcast_origin_bytes_total', len);
       if (!sha1(data).equals(this.meta.pieces[i])) {
         this.wasted += len;
         throw new Error(`piece ${i} from the origin failed its hash check (is the URL the right file?)`);

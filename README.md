@@ -1,8 +1,8 @@
-# Shoal
+# Swarmcast
 
 Peer-assisted distribution for very large artifacts: model checkpoints, dataset shards, VM images, build outputs.
 
-When fifty machines need the same 70 GB file at the same time, pulling it fifty times from object storage saturates the NAT gateway and multiplies egress cost. Shoal pulls it once. Every piece is SHA-1 verified, and workers trade pieces with each other over the BitTorrent wire protocol inside your network.
+When fifty machines need the same 70 GB file at the same time, pulling it fifty times from object storage saturates the NAT gateway and multiplies egress cost. Swarmcast pulls it once. Every piece is SHA-1 verified, and workers trade pieces with each other over the BitTorrent wire protocol inside your network.
 
 ```
                 POST /api/torrent/create  (X-Request-ID: rollout-042)
@@ -31,7 +31,7 @@ When fifty machines need the same 70 GB file at the same time, pulling it fifty 
 | **Idempotency** | Mutating calls with `X-Request-ID` are stored for 24 h. A CI retry gets the first response back (`Idempotent-Replay: true`), and reusing an ID for a different request returns 422. The ID shows up on every worker's activity entry. |
 | **Observability** | Prometheus `/metrics` (HTTP rate and latency histograms, bytes, CAS savings, leases, directive lag, transfers by state); W3C `traceparent` propagation with an optional OTLP/HTTP span exporter; a provisioned Grafana dashboard. |
 | **Console** (`console/`) | React + TypeScript. Live over WebSocket with REST fallback. Transfers with filters and search, a drag-and-drop "share any file" flow with magnet + QR, a detail drawer (piece map, workers, peers, file selection, activity), Fleet, Activity and Settings pages. Mobile layout with a bottom tab bar. |
-| **CLI** (`bin/shoal.js`) | `login`, `push`, `add`, `ls`, `status`, `pause`, `resume`, `rm`, `wait`, `pull`, plus offline `create`, `seed` and `get` that need no server. |
+| **CLI** (`bin/swarmcast.js`) | `login`, `push`, `add`, `ls`, `status`, `pause`, `resume`, `rm`, `wait`, `pull`, plus offline `create`, `seed` and `get` that need no server. |
 
 ## Run it
 
@@ -41,7 +41,7 @@ Node 22.5+ (it uses the built-in `node:sqlite`).
 npm install
 (cd console && npm install && npm run build)   # the API serves the built console
 npm start                                      # control plane + one worker on :3029
-SHOAL_ROLE=worker SHOAL_DATA_DIR=data/w2 SHOAL_PEER_PORT=0 npm start   # add workers
+SWARMCAST_ROLE=worker SWARMCAST_DATA_DIR=data/w2 SWARMCAST_PEER_PORT=0 npm start   # add workers
 ```
 
 Open http://localhost:3029. The first account you register becomes the admin.
@@ -53,7 +53,7 @@ For console development, run `cd console && npm run dev` (Vite on :5173, proxied
 ```bash
 docker compose up -d                       # control plane + 2 workers, SQLite plumbing
 docker compose up -d --scale worker=6
-SHOAL_BUS=kafka SHOAL_LEASES=redis docker compose --profile kafka up -d
+SWARMCAST_BUS=kafka SWARMCAST_LEASES=redis docker compose --profile kafka up -d
 docker compose --profile observability up -d   # Prometheus :9090, Grafana :3000
 ```
 
@@ -61,13 +61,13 @@ docker compose --profile observability up -d   # Prometheus :9090, Grafana :3000
 
 ```bash
 curl -X POST http://localhost:3029/api/torrent/create \
-  -H "Authorization: Bearer $SHOAL_SERVICE_TOKEN" \
+  -H "Authorization: Bearer $SWARMCAST_SERVICE_TOKEN" \
   -H "X-Request-ID: model-rollout-2026-11-13-001" \
   -H "Content-Type: application/json" \
   -d '{"magnetURI":"magnet:?xt=urn:btih:…","replicas":"all"}'
 
-shoal push ./checkpoint.safetensors --replicas all --request-id "$CI_PIPELINE_ID"
-shoal wait <id> --timeout 1800      # exits 0 once every placement is seeding
+swarmcast push ./checkpoint.safetensors --replicas all --request-id "$CI_PIPELINE_ID"
+swarmcast wait <id> --timeout 1800      # exits 0 once every placement is seeding
 ```
 
 ### API
@@ -116,7 +116,7 @@ These numbers come from loopback on one laptop. On a real network, latency and l
 
 ## Configuration
 
-See `.env.example`. Key settings: `SHOAL_ROLE` (`all` / `api` / `worker`), `SHOAL_BUS` (`sqlite` / `kafka`), `SHOAL_LEASES` (`sqlite` / `redis`), `SHOAL_DHT`, `SHOAL_ADVERTISE_HOST`, `SHOAL_SERVICE_TOKEN`, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `OTEL_EXPORTER_OTLP_ENDPOINT`.
+See `.env.example`. Key settings: `SWARMCAST_ROLE` (`all` / `api` / `worker`), `SWARMCAST_BUS` (`sqlite` / `kafka`), `SWARMCAST_LEASES` (`sqlite` / `redis`), `SWARMCAST_DHT`, `SWARMCAST_ADVERTISE_HOST`, `SWARMCAST_SERVICE_TOKEN`, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, `OTEL_EXPORTER_OTLP_ENDPOINT`.
 
 ## Limits
 

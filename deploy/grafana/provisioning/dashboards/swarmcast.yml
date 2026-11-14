@@ -1,0 +1,3 @@
+apiVersion: 1
+providers:
+  - { name: swarmcast, folder: Swarmcast, type: file, options: { path: /var/lib/grafana/dashboards } }

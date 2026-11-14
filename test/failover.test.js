@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { startShoal } from '../src/server.js';
+import { startSwarmcast } from '../src/server.js';
 import { Engine } from '../src/engine/engine.js';
 import { toMagnet } from '../src/engine/metainfo.js';
 
@@ -14,15 +14,15 @@ const until = (fn, ms = 60000) => new Promise((res, rej) => {
 });
 
 test('a crashed worker\'s lease expires and another worker takes the transfer over', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'shoal-failover-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'swarmcast-failover-'));
   const seedDir = path.join(root, 'external'); await mkdir(seedDir);
   await writeFile(path.join(seedDir, 'dataset.parquet'), randomBytes(1024 * 1024));
   const external = await new Engine({ dataDir: path.join(root, 'ext'), port: 0, dht: false }).start();
   const seed = await external.seed(path.join(seedDir, 'dataset.parquet'));
-  const common = { dataDir: root, dbFile: path.join(root, 'shoal.db'), peerPort: 0, dhtPort: 0, dht: false, logRequests: false, jwtSecret: 'x', trackers: [] };
-  const api = await startShoal({ ...common, role: 'api', port: 0 });
+  const common = { dataDir: root, dbFile: path.join(root, 'swarmcast.db'), peerPort: 0, dhtPort: 0, dht: false, logRequests: false, jwtSecret: 'x', trackers: [] };
+  const api = await startSwarmcast({ ...common, role: 'api', port: 0 });
   const base = `http://127.0.0.1:${api.server.address().port}`;
-  const w1 = await startShoal({ ...common, role: 'worker', dataDir: path.join(root, 'w1'), nodeId: 'w1' });
+  const w1 = await startSwarmcast({ ...common, role: 'worker', dataDir: path.join(root, 'w1'), nodeId: 'w1' });
   try {
     const { token } = await fetch(`${base}/api/auth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'ops', email: 'o@x.io', password: 'password123' }) }).then((r) => r.json());
     const H = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
@@ -35,7 +35,7 @@ test('a crashed worker\'s lease expires and another worker takes the transfer ov
     await w1.worker.engine.stop();
     await w1.bus.close();
 
-    const w2 = await startShoal({ ...common, role: 'worker', dataDir: path.join(root, 'w2'), nodeId: 'w2' });
+    const w2 = await startSwarmcast({ ...common, role: 'worker', dataDir: path.join(root, 'w2'), nodeId: 'w2' });
     try {
       await until(async () => {
         const v = await fetch(`${base}/api/torrent/${t.id}`, { headers: H }).then((r) => r.json());
@@ -52,7 +52,7 @@ test('a crashed worker\'s lease expires and another worker takes the transfer ov
 });
 
 test('CAS: a second artifact that shares pieces is filled from disk, not the network', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'shoal-cas-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'swarmcast-cas-'));
   const shared = randomBytes(16384 * 8);
   await mkdir(path.join(root, 'v1')); await mkdir(path.join(root, 'v2'));
   await writeFile(path.join(root, 'v1', 'model.bin'), shared);

@@ -4,7 +4,7 @@ import { mkdtemp, rm, readFile, readdir } from 'node:fs/promises';
 import { randomBytes, createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { startShoal } from '../src/server.js';
+import { startSwarmcast } from '../src/server.js';
 
 const until = (fn, ms = 60000) => new Promise((res, rej) => {
   const start = Date.now();
@@ -12,13 +12,13 @@ const until = (fn, ms = 60000) => new Promise((res, rej) => {
 });
 
 test('fleet rollout: one upload fans out to every worker, idempotent retries, pause/resume/delete', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'shoal-cluster-'));
-  const common = { dataDir: root, dbFile: path.join(root, 'shoal.db'), peerPort: 0, dhtPort: 0, dht: false, logRequests: false, jwtSecret: 's3cret' };
-  const api = await startShoal({ ...common, role: 'api', port: 0, trackers: [] });
+  const root = await mkdtemp(path.join(os.tmpdir(), 'swarmcast-cluster-'));
+  const common = { dataDir: root, dbFile: path.join(root, 'swarmcast.db'), peerPort: 0, dhtPort: 0, dht: false, logRequests: false, jwtSecret: 's3cret' };
+  const api = await startSwarmcast({ ...common, role: 'api', port: 0, trackers: [] });
   const base = `http://127.0.0.1:${api.server.address().port}`;
   api.cfg.trackers = [`${base}/announce`];
   const workers = [];
-  for (let i = 0; i < 3; i++) workers.push(await startShoal({ ...common, role: 'worker', dataDir: path.join(root, `w${i}`), nodeId: `w${i}`, trackers: [`${base}/announce`] }));
+  for (let i = 0; i < 3; i++) workers.push(await startSwarmcast({ ...common, role: 'worker', dataDir: path.join(root, `w${i}`), nodeId: `w${i}`, trackers: [`${base}/announce`] }));
   // uploads must be readable by the origin worker: share the API upload dir
   try {
     const reg = await fetch(`${base}/api/auth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'ops', email: 'ops@x.io', password: 'password123' }) }).then((r) => r.json());
@@ -52,8 +52,8 @@ test('fleet rollout: one upload fans out to every worker, idempotent retries, pa
     const stats = await fetch(`${base}/api/statistics/global`, { headers: H }).then((r) => r.json());
     assert.equal(stats.engine.workers, 3);
     const metrics = await fetch(`${base}/metrics`).then((r) => r.text());
-    assert.match(metrics, /shoal_idempotent_replays_total 1/);
-    assert.match(metrics, /shoal_active_workers 3/);
+    assert.match(metrics, /swarmcast_idempotent_replays_total 1/);
+    assert.match(metrics, /swarmcast_active_workers 3/);
 
     const download = await fetch(`${base}/api/torrent/${t1.id}/download`, { headers: H });
     assert.equal(download.status, 200);

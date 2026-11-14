@@ -38,7 +38,7 @@ test('magnet parse handles hex and base32 hashes', () => {
 });
 
 test('createTorrent output parses back with a stable info hash', async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'shoal-meta-'));
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'swarmcast-meta-'));
   await writeFile(path.join(dir, 'f.bin'), randomBytes(100_000));
   const t = await createTorrent(path.join(dir, 'f.bin'), { announce: ['http://x/announce'], pieceLength: 16384 });
   assert.equal(t.pieces.length, Math.ceil(100_000 / 16384));

@@ -13,7 +13,7 @@ import { toMagnet } from '../../src/engine/metainfo.js';
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? Number(process.argv[i + 1]) : d; };
 const N = arg('--nodes', 20); const SIZE = arg('--size-mb', 64) * 1024 * 1024; const LIMIT = arg('--origin-limit-mb', 0) * 1024 * 1024;
 
-const root = await mkdtemp(path.join(os.tmpdir(), 'shoal-herd-'));
+const root = await mkdtemp(path.join(os.tmpdir(), 'swarmcast-herd-'));
 const file = path.join(root, 'checkpoint.safetensors');
 await writeFile(file, randomBytes(SIZE));
 const origin = await new Engine({ dataDir: path.join(root, 'origin'), port: 0, dht: false, uploadLimit: LIMIT }).start();

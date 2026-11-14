@@ -1,6 +1,6 @@
 # Feature map
 
-This file lists every feature of the reference design Shoal was built to cover: a peer-to-peer artifact distribution platform with a REST control plane, workers, Kafka, Redis and a React console. For each feature it shows where Shoal implements it and how it was tested.
+This file lists every feature of the reference design Swarmcast was built to cover: a peer-to-peer artifact distribution platform with a REST control plane, workers, Kafka, Redis and a React console. For each feature it shows where Swarmcast implements it and how it was tested.
 
 Tests are marked:
 - **T**: automated test (`npm test`, plus `test/kafka-redis.test.js`);
@@ -9,14 +9,14 @@ Tests are marked:
 
 ## Control plane and data plane
 
-| Reference feature | In Shoal | Tested |
+| Reference feature | In Swarmcast | Tested |
 |---|---|---|
 | Stateless REST control plane that owns orchestration and lifecycle commands | `src/api` (Express). It records desired state and publishes directives; workers act on them | T, A |
 | PostgreSQL as source of truth for metadata, chunk state and jobs | SQLite in WAL mode (`node:sqlite`). This is deliberate: a single binary with no database server. Kafka and Redis replace the bus and the leases, not the store (see README limits) | T |
 | Horizontally scalable, crash-only Node.js workers | `src/cluster/worker.js`. Run `--scale worker=N`. A killed worker loses nothing committed | T (failover) |
 | Content-addressable storage with dedup across transfers | `src/engine/storage.js` CAS keyed by SHA-256. A new artifact sharing pieces with an old one fills them from disk | T (CAS: 8 of 10 pieces reused) |
 | Distributed leases with Redis `SETNX` and fencing tokens | `src/cluster/leases.js`: SQLite or Redis leases with fencing. A stale worker's writes match zero rows | T, T (Redis) |
-| Kafka event bus for job dispatch and lifecycle events | `src/cluster/bus.js`: SQLite tail or Kafka (`SHOAL_BUS=kafka`) | T (Kafka) |
+| Kafka event bus for job dispatch and lifecycle events | `src/cluster/bus.js`: SQLite tail or Kafka (`SWARMCAST_BUS=kafka`) | T (Kafka) |
 | Lease sweeper / resume abandoned transfers | Leases expire. Another worker takes over and resumes from the stored bitfield | T (failover) |
 | Checkpointing and resume after restart | Per-placement bitfield is written every second, and resume skips verified pieces | T |
 | Queue manager with max concurrent downloads | `maxActiveTorrents` per worker. Extra transfers are queued, and seeding doesn't count | A, B |
@@ -26,7 +26,7 @@ Tests are marked:
 
 ## BitTorrent engine
 
-| Reference feature | In Shoal | Tested |
+| Reference feature | In Swarmcast | Tested |
 |---|---|---|
 | Bencode, torrent parser, torrent creator (single and multi-file) | `src/engine/bencode.js`, `metainfo.js` | T |
 | Magnet links | Hex and base32 info hashes, `x.pe` peer hints | T |
@@ -41,7 +41,7 @@ Tests are marked:
 
 ## API
 
-| Reference endpoint | In Shoal | Tested |
+| Reference endpoint | In Swarmcast | Tested |
 |---|---|---|
 | `/api/auth` register, login, Google OAuth (redirect and callback) | Same paths. Passwords use scrypt, sessions use JWT, and Google sign-in is optional | T, B |
 | `/api/user/profile` (GET/PUT), `/password`, `/history` | Same | B |
@@ -55,7 +55,7 @@ Tests are marked:
 
 ## Observability and operations
 
-| Reference feature | In Shoal | Tested |
+| Reference feature | In Swarmcast | Tested |
 |---|---|---|
 | Prometheus metrics: API latency, queue depth, heartbeats, leases, CAS hit rate, dedup bytes | `/metrics` with HTTP histograms, bytes, CAS savings, leases, directive lag, transfers by state and origin bytes | T |
 | OpenTelemetry tracing across REST, Kafka and workers | W3C `traceparent` propagation with an optional OTLP/HTTP exporter | A (log trace ids) |
@@ -67,7 +67,7 @@ Tests are marked:
 
 ## Console
 
-| Reference screen or component | In Shoal console | Tested |
+| Reference screen or component | In Swarmcast console | Tested |
 |---|---|---|
 | Login page (email and password, Google) | `Login.tsx`. The first account becomes admin | B |
 | Dashboard with torrent list and speed graph | `Transfers.tsx`: tiles, throughput chart, status tabs, filter and search | B |
@@ -79,9 +79,9 @@ Tests are marked:
 | Toasts, confirm dialog | In-app toasts and confirm dialogs (no browser dialogs) | B |
 | Mobile nav | Bottom tab bar under 860 px. Every page checked at 390 px with no sideways scroll | B |
 
-## Added in Shoal
+## Added in Swarmcast
 
 - **Fleet rollout:** `replicas: "all"` or `N` places an artifact on every worker or on N of them.
 - **Fleet and Activity pages:** worker health, DHT, tracker, cache savings, and a feed of every directive and lease. Account events are visible only to their owner and admins.
-- **CLI** (`bin/shoal.js`): `push`, `add`, `ls`, `status`, `wait`, `pull`, and the offline `create`, `seed` and `get`.
+- **CLI** (`bin/swarmcast.js`): `push`, `add`, `ls`, `status`, `wait`, `pull`, and the offline `create`, `seed` and `get`.
 - **Herd benchmark** (`npm run herd`): 20 nodes saved 91.8% of origin egress on one machine.

@@ -37,7 +37,7 @@ function idempotency(db, metrics) {
         return res.status(422).json({ error: 'X-Request-ID was already used for a different request' });
       }
       if (hit.status == null) return res.status(409).json({ error: 'A request with this X-Request-ID is still in progress' });
-      metrics.inc('shoal_idempotent_replays_total');
+      metrics.inc('swarmcast_idempotent_replays_total');
       res.set('Idempotent-Replay', 'true');
       return res.status(hit.status).type('application/json').send(hit.body);
     }
@@ -162,7 +162,7 @@ export function createApp({ cfg, db, bus, metrics, leases, started = Date.now() 
     app.use(express.static(dist, { index: false, maxAge: '1h' }));
     app.get(/^\/(?!api\/|ws|announce|metrics).*/, (req, res) => res.sendFile(path.join(dist, 'index.html')));
   } else {
-    app.get('/', (req, res) => res.json({ name: 'Shoal control plane', docs: '/api/health', console: cfg.consoleUrl }));
+    app.get('/', (req, res) => res.json({ name: 'Swarmcast control plane', docs: '/api/health', console: cfg.consoleUrl }));
   }
 
   app.use((req, res) => res.status(404).json({ error: `No route for ${req.method} ${req.path}` }));

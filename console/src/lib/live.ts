@@ -39,7 +39,7 @@ export function connect() {
       detailListeners.get(msg.id)?.forEach((fn) => fn(msg.detail));
     } else if (msg.type === 'event') {
       set({ events: [msg.event, ...state.events].slice(0, 100) });
-      window.dispatchEvent(new CustomEvent('shoal:event', { detail: msg.event }));
+      window.dispatchEvent(new CustomEvent('swarmcast:event', { detail: msg.event }));
     }
   };
   ws.onclose = (e) => {

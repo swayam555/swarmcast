@@ -1,4 +1,4 @@
-/* Shoal console. Light, quiet surfaces; colour carries status only. */
+/* Swarmcast console. Light, quiet surfaces; colour carries status only. */
 :root {
   --bg: #f3f2ee; --panel: #ffffff; --sunk: #f8f7f4; --line: #e3e0d8; --line-strong: #cfcbc0;
   --ink: #15191f; --ink-2: #3b4048; --muted: #6f6b63;

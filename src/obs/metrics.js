@@ -8,26 +8,26 @@ const fmtLabels = (l) => {
 };
 
 const HELP = {
-  shoal_http_requests_total: ['counter', 'HTTP requests by method, route and status'],
-  shoal_http_request_duration_seconds: ['histogram', 'HTTP request latency'],
-  shoal_bytes_downloaded_total: ['counter', 'Payload bytes received from peers'],
-  shoal_bytes_uploaded_total: ['counter', 'Payload bytes sent to peers'],
-  shoal_cas_dedup_bytes_total: ['counter', 'Bytes satisfied from the content-addressed store instead of the network'],
-  shoal_pieces_verified_total: ['counter', 'Pieces that passed SHA-1 verification'],
-  shoal_transfers_completed_total: ['counter', 'Transfers that finished downloading'],
-  shoal_directives_published_total: ['counter', 'Directives published by the control plane'],
-  shoal_directives_consumed_total: ['counter', 'Directives consumed by workers'],
-  shoal_lease_acquired_total: ['counter', 'Placement leases acquired'],
-  shoal_lease_lost_total: ['counter', 'Placement leases lost (fenced out)'],
-  shoal_idempotent_replays_total: ['counter', 'Requests answered from the idempotency store'],
-  shoal_worker_leases_held: ['gauge', 'Leases currently held by a worker'],
-  shoal_transfers: ['gauge', 'Transfers by state'],
-  shoal_active_workers: ['gauge', 'Workers with a fresh heartbeat'],
-  shoal_queue_lag_seconds: ['gauge', 'Directive bus lag'],
-  shoal_download_speed_bytes: ['gauge', 'Fleet download speed (bytes/s)'],
-  shoal_upload_speed_bytes: ['gauge', 'Fleet upload speed (bytes/s)'],
-  shoal_cas_hit_ratio: ['gauge', 'CAS hit ratio'],
-  shoal_ws_clients: ['gauge', 'Connected WebSocket clients'],
+  swarmcast_http_requests_total: ['counter', 'HTTP requests by method, route and status'],
+  swarmcast_http_request_duration_seconds: ['histogram', 'HTTP request latency'],
+  swarmcast_bytes_downloaded_total: ['counter', 'Payload bytes received from peers'],
+  swarmcast_bytes_uploaded_total: ['counter', 'Payload bytes sent to peers'],
+  swarmcast_cas_dedup_bytes_total: ['counter', 'Bytes satisfied from the content-addressed store instead of the network'],
+  swarmcast_pieces_verified_total: ['counter', 'Pieces that passed SHA-1 verification'],
+  swarmcast_transfers_completed_total: ['counter', 'Transfers that finished downloading'],
+  swarmcast_directives_published_total: ['counter', 'Directives published by the control plane'],
+  swarmcast_directives_consumed_total: ['counter', 'Directives consumed by workers'],
+  swarmcast_lease_acquired_total: ['counter', 'Placement leases acquired'],
+  swarmcast_lease_lost_total: ['counter', 'Placement leases lost (fenced out)'],
+  swarmcast_idempotent_replays_total: ['counter', 'Requests answered from the idempotency store'],
+  swarmcast_worker_leases_held: ['gauge', 'Leases currently held by a worker'],
+  swarmcast_transfers: ['gauge', 'Transfers by state'],
+  swarmcast_active_workers: ['gauge', 'Workers with a fresh heartbeat'],
+  swarmcast_queue_lag_seconds: ['gauge', 'Directive bus lag'],
+  swarmcast_download_speed_bytes: ['gauge', 'Fleet download speed (bytes/s)'],
+  swarmcast_upload_speed_bytes: ['gauge', 'Fleet upload speed (bytes/s)'],
+  swarmcast_cas_hit_ratio: ['gauge', 'CAS hit ratio'],
+  swarmcast_ws_clients: ['gauge', 'Connected WebSocket clients'],
 };
 const BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5];
 
@@ -81,8 +81,8 @@ export function httpMetrics(metrics) {
     res.on('finish', () => {
       const route = req.route?.path ? `${req.baseUrl}${req.route.path}` : (res.statusCode === 404 ? 'unmatched' : req.baseUrl || req.path);
       const secs = Number(process.hrtime.bigint() - start) / 1e9;
-      metrics.inc('shoal_http_requests_total', 1, { method: req.method, route, status: res.statusCode });
-      metrics.observe('shoal_http_request_duration_seconds', secs, { method: req.method, route });
+      metrics.inc('swarmcast_http_requests_total', 1, { method: req.method, route, status: res.statusCode });
+      metrics.observe('swarmcast_http_request_duration_seconds', secs, { method: req.method, route });
     });
     next();
   };

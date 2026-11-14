@@ -17,7 +17,7 @@ export class Worker {
     this.dataDir = path.resolve(dataDir);
     mkdirSync(this.dataDir, { recursive: true });
     this.id = nodeId || this.loadNodeId();
-    this.host = host || process.env.SHOAL_ADVERTISE_HOST || '127.0.0.1';
+    this.host = host || process.env.SWARMCAST_ADVERTISE_HOST || '127.0.0.1';
     this.held = new Map(); // transferId -> { slot, fence, transfer }
     this.engineOpts = { dataDir: this.dataDir, port: peerPort, dhtPort, dht, dhtBootstrap, trackers, announceHost: this.host, metrics };
   }
@@ -81,15 +81,15 @@ export class Worker {
       if (!ok) {
         // Fenced out: someone else owns this placement now. Stop touching it.
         this.log.warn?.(`[${this.id}] lost lease on ${tid}, stopping`);
-        this.metrics?.inc('shoal_lease_lost_total');
+        this.metrics?.inc('swarmcast_lease_lost_total');
         await this.drop(tid, { keepRow: true });
       }
     }
-    this.metrics?.set('shoal_worker_leases_held', this.held.size, { node: this.id });
+    this.metrics?.set('swarmcast_worker_leases_held', this.held.size, { node: this.id });
   }
 
   async onDirective({ type, payload, requestId }) {
-    this.metrics?.inc('shoal_directives_consumed_total', 1, { type });
+    this.metrics?.inc('swarmcast_directives_consumed_total', 1, { type });
     if (type === 'SETTINGS_CHANGED') {
       const s = getSettings(this.db);
       this.engine.setSpeedLimits(s.speedLimits);
@@ -168,7 +168,7 @@ export class Worker {
     t.transferId = tr.id;
     if (tr.desired === 'paused') await this.engine.pause(t.infoHash);
     logActivity(this.db, { transferId: tr.id, nodeId: this.id, event: 'transfer.assigned', detail: { slot, fence, resumed: Boolean(prev?.bitfield) }, requestId });
-    this.metrics?.inc('shoal_lease_acquired_total');
+    this.metrics?.inc('swarmcast_lease_acquired_total');
   }
 
   async drop(tid, { deleteFiles = false, keepRow = false } = {}) {
@@ -204,10 +204,10 @@ export class Worker {
       this.db.run('UPDATE transfers SET name = ?, size = ?, piece_count = ?, torrent = COALESCE(torrent, ?), updated_at = ? WHERE id = ?', t.meta.name, t.meta.length, t.meta.pieces.length, t.meta.torrent, now(), tid);
       logActivity(this.db, { transferId: tid, nodeId: this.id, event: 'transfer.metadata', detail: { name: t.meta.name, size: t.meta.length } });
     }
-    if (ev === 'complete') { logActivity(this.db, { transferId: tid, nodeId: this.id, event: 'transfer.completed', detail: { downloaded: t.downloaded, dedupBytes: t.dedupBytes } }); this.metrics?.inc('shoal_transfers_completed_total'); }
+    if (ev === 'complete') { logActivity(this.db, { transferId: tid, nodeId: this.id, event: 'transfer.completed', detail: { downloaded: t.downloaded, dedupBytes: t.dedupBytes } }); this.metrics?.inc('swarmcast_transfers_completed_total'); }
     if (ev === 'state' && args[0] === 'error') logActivity(this.db, { transferId: tid, nodeId: this.id, event: 'transfer.error', detail: { message: args[1] } });
     if (ev === 'peer:banned') logActivity(this.db, { transferId: tid, nodeId: this.id, event: 'peer.banned', detail: { peer: args[0] } });
-    if (ev === 'piece') this.metrics?.inc('shoal_pieces_verified_total');
+    if (ev === 'piece') this.metrics?.inc('swarmcast_pieces_verified_total');
   }
 }
 

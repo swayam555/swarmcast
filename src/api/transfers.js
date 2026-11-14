@@ -72,7 +72,7 @@ export function transferRoutes({ cfg, db, bus, metrics }) {
   const canWrite = (req, tr) => req.user.role === 'admin' || tr.owner_id === req.user.id || !tr.owner_id;
   const dispatch = async (type, tr, req, extra = {}) => {
     await bus.publish(type, { transferId: tr.id, infoHash: tr.info_hash, desired: tr.desired, ...extra }, { requestId: req.id });
-    metrics.inc('shoal_directives_published_total', 1, { type });
+    metrics.inc('swarmcast_directives_published_total', 1, { type });
   };
 
   /** An HTTP origin makes workers fetch URLs, so only admins (and the service token) may set one. */
@@ -151,7 +151,7 @@ export function transferRoutes({ cfg, db, bus, metrics }) {
       await mkdir(dir, { recursive: true });
       const file = path.join(dir, filename);
       await writeFile(file, req.body);
-      const meta = await createTorrent(file, { announce: cfg.trackers, comment: `shared via Shoal by ${req.user.username}` });
+      const meta = await createTorrent(file, { announce: cfg.trackers, comment: `shared via Swarmcast by ${req.user.username}` });
       const magnet = toMagnet({ infoHash: meta.infoHash, name: meta.name, announce: meta.announce, length: meta.length });
       const result = await register(req, { infoHash: meta.infoHash, name: meta.name, magnet, torrent: meta.torrent, size: meta.length, pieces: meta.pieces.length, sourcePath: file });
       if (!result.created) await rm(dir, { recursive: true, force: true }); // same file shared again: keep the first copy only
@@ -180,7 +180,7 @@ export function transferRoutes({ cfg, db, bus, metrics }) {
       const limit = new Transform({ transform(chunk, _enc, cb) { seen += chunk.length; cb(seen > cap ? Object.assign(new Error(`Larger than the ${cfg.maxUpload} limit`), { status: 413 }) : null, chunk); } });
       await pipeline(upstream, limit, createWriteStream(file));
       if (!seen) throw Object.assign(new Error('The URL returned an empty file'), { status: 400 });
-      const meta = await createTorrent(file, { announce: cfg.trackers, comment: `pulled by Shoal for ${req.user.username}` });
+      const meta = await createTorrent(file, { announce: cfg.trackers, comment: `pulled by Swarmcast for ${req.user.username}` });
       const magnet = toMagnet({ infoHash: meta.infoHash, name: meta.name, announce: meta.announce, length: meta.length });
       const result = await register(req, { infoHash: meta.infoHash, name: meta.name, magnet, torrent: meta.torrent, size: meta.length, pieces: meta.pieces.length, sourcePath: file, originUrl: url });
       if (!result.created) await rm(dir, { recursive: true, force: true }); // already known: keep the first copy only

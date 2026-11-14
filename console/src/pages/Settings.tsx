@@ -79,7 +79,7 @@ export function Settings({ user, onUser, onLogout }: { user: User; onUser: (u: U
           <section className="panel">
             <div className="panel-head"><h2>From a pipeline</h2></div>
             <pre className="code">{`curl -X POST ${location.origin}/api/torrent/create \\
-  -H "Authorization: Bearer $SHOAL_TOKEN" \\
+  -H "Authorization: Bearer $SWARMCAST_TOKEN" \\
   -H "X-Request-ID: rollout-$(date +%F)-001" \\
   -H "Content-Type: application/json" \\
   -d '{"magnetURI":"magnet:?xt=urn:btih:…","replicas":"all"}'`}</pre>

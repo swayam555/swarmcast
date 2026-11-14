@@ -19,7 +19,7 @@ export function httpGet(url, { headers = {}, timeoutMs = TIMEOUT_MS, redirects =
     const u = new URL(url);
     const lib = u.protocol === 'https:' ? https : u.protocol === 'http:' ? http : null;
     if (!lib) return reject(new Error('only http and https URLs are supported'));
-    const req = lib.get(u, { headers: { 'user-agent': 'shoal', ...headers } }, (res) => {
+    const req = lib.get(u, { headers: { 'user-agent': 'swarmcast', ...headers } }, (res) => {
       if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
         res.resume();
         if (redirects <= 0) return reject(new Error('too many redirects'));

@@ -6,7 +6,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 export const als = new AsyncLocalStorage();
 const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-const service = process.env.OTEL_SERVICE_NAME || 'shoal';
+const service = process.env.OTEL_SERVICE_NAME || 'swarmcast';
 const buffer = [];
 
 export function parseTraceparent(h) {
@@ -45,7 +45,7 @@ async function flush() {
   const body = {
     resourceSpans: [{
       resource: { attributes: attr({ 'service.name': service }) },
-      scopeSpans: [{ scope: { name: 'shoal' }, spans: spans.map((s) => ({ traceId: s.traceId, spanId: s.spanId, parentSpanId: s.parentId, name: s.name, kind: 2, startTimeUnixNano: String(s.start), endTimeUnixNano: String(s.endTime), attributes: attr(s.attributes), status: { code: s.status } })) }],
+      scopeSpans: [{ scope: { name: 'swarmcast' }, spans: spans.map((s) => ({ traceId: s.traceId, spanId: s.spanId, parentSpanId: s.parentId, name: s.name, kind: 2, startTimeUnixNano: String(s.start), endTimeUnixNano: String(s.endTime), attributes: attr(s.attributes), status: { code: s.status } })) }],
     }],
   };
   try { await fetch(`${endpoint.replace(/\/$/, '')}/v1/traces`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(3000) }); } catch { /* collector down: drop */ }

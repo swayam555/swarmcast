@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { randomBytes, createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { startShoal } from '../src/server.js';
+import { startSwarmcast } from '../src/server.js';
 import { createTorrent } from '../src/engine/metainfo.js';
 import { rangesFor } from '../src/engine/origin.js';
 
@@ -45,16 +45,16 @@ test('origin byte ranges map onto the files of a multi-file torrent', () => {
 });
 
 test('cold start from an HTTP origin: pull once from a URL, or fill a seedless swarm from it', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'shoal-origin-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'swarmcast-origin-'));
   const coldFile = randomBytes(1024 * 1024 + 17);
   const seedless = randomBytes(1536 * 1024 + 5);
   const store = await objectStore({ '/models/cold.bin': coldFile, '/models/seedless.bin': seedless, '/models/wrong.bin': randomBytes(seedless.length) });
-  const common = { dataDir: root, dbFile: path.join(root, 'shoal.db'), peerPort: 0, dhtPort: 0, dht: false, logRequests: false, jwtSecret: 's3cret' };
-  const api = await startShoal({ ...common, role: 'api', port: 0, trackers: [] });
+  const common = { dataDir: root, dbFile: path.join(root, 'swarmcast.db'), peerPort: 0, dhtPort: 0, dht: false, logRequests: false, jwtSecret: 's3cret' };
+  const api = await startSwarmcast({ ...common, role: 'api', port: 0, trackers: [] });
   const base = `http://127.0.0.1:${api.server.address().port}`;
   api.cfg.trackers = [`${base}/announce`];
   const workers = [];
-  for (let i = 0; i < 2; i++) workers.push(await startShoal({ ...common, role: 'worker', dataDir: path.join(root, `w${i}`), nodeId: `w${i}`, trackers: [`${base}/announce`] }));
+  for (let i = 0; i < 2; i++) workers.push(await startSwarmcast({ ...common, role: 'worker', dataDir: path.join(root, `w${i}`), nodeId: `w${i}`, trackers: [`${base}/announce`] }));
   const json = { 'content-type': 'application/json' };
   const post = (p, H, body) => fetch(`${base}${p}`, { method: 'POST', headers: { ...json, ...H }, body: JSON.stringify(body) });
   try {
